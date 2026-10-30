@@ -1,0 +1,32 @@
+// Página somente leitura para o contato de confiança. Mostra status e posição; nunca dados de pagamento.
+import { $, h, api, stream, mapView } from './common.js';
+
+const root = $('#app');
+const token = new URLSearchParams(location.search).get('t') || '';
+
+async function boot() {
+  let cfg;
+  try { cfg = await api('GET', '/api/config'); } catch (e) { return fail(e.message); }
+  const map = mapView(cfg);
+  const title = h('h1', {});
+  const sub = h('p', { class: 'muted' });
+  const eta = h('span', { class: 'pill lime', hidden: true });
+  root.replaceChildren(
+    h('div', { class: 'demo-bar' }, h('span', {}, 'Acompanhamento de demonstração')),
+    h('header', { class: 'topbar' }, h('div', { class: 'logo' }, h('img', { src: '/logo.svg', alt: '' }), h('span', {}, 'Dr', h('span', { class: 'bang' }, '!'), 'nk'))),
+    h('main', { class: 'screen' }, map.el, h('section', { class: 'sheet stack' }, title, sub, eta,
+      h('p', { class: 'muted small' }, 'Você recebeu este link porque alguém compartilhou a viagem com você. Em risco imediato, ligue 190 ou 192.'))));
+  const paint = (r) => {
+    if (!r) return;
+    title.textContent = r.stateLabel;
+    sub.textContent = `${r.customerFirstName} segue de ${r.pickup.label} para ${r.destination.label}, no ${r.vehicle.model} ${r.vehicle.color}.${r.driverFirstName ? ` Motorista: ${r.driverFirstName}.` : ''}`;
+    eta.hidden = !r.etaMin; eta.textContent = `~${r.etaMin} min`;
+    map.update({ pickup: r.pickup, dest: r.destination, driver: r.driverPosition });
+  };
+  const load = async () => { try { paint(await api('GET', `/api/share/${token}`)); } catch (e) { if (e.status === 404) fail(e.message); } };
+  await load();
+  setInterval(load, 3000);
+  stream(`/api/stream?share=${token}`, paint);
+}
+function fail(msg) { root.replaceChildren(h('section', { class: 'sheet full stack' }, h('h1', {}, 'Link indisponível'), h('div', { class: 'error', role: 'alert' }, msg))); }
+boot();

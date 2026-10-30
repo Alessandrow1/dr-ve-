@@ -1,0 +1,13 @@
+{
+  "name": "drink-prototipo",
+  "version": "0.1.0",
+  "description": "Dr!nk — protótipo de plataforma de motoristas designados (Mossoró/RN). Dados e pagamentos simulados.",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test \"test/*.test.js\""
+  }
+}

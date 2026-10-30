@@ -1,0 +1,30 @@
+body.admin { display: block; height: auto; min-height: 100%; background: var(--ink); }
+.adm { display: grid; grid-template-columns: 220px 1fr; min-height: 100dvh; }
+.adm nav { background: var(--graphite); border-right: 1px solid var(--line); padding: 18px 12px; position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 4px; }
+.adm nav .logo { margin: 4px 8px 16px; }
+.adm nav button { min-height: 44px; text-align: left; background: transparent; border: 0; border-radius: 12px; padding: 0 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.adm nav button:hover { background: var(--ink); }
+.adm nav button[aria-current='page'] { background: var(--lime); color: var(--ink); }
+.adm nav .badge { background: var(--danger); color: var(--ink); border-radius: 99px; font-size: 12px; font-weight: 800; padding: 1px 8px; }
+.adm main { padding: 22px 28px 40px; min-width: 0; }
+.adm main > * + * { margin-top: 18px; }
+.adm h1 { font-size: 26px; letter-spacing: -0.03em; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.data th { text-align: left; font-weight: 700; color: var(--muted); padding: 10px 12px; background: var(--graphite); white-space: nowrap; }
+table.data td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+table.data td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.toolbar select { min-height: 44px; background: var(--graphite); border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; }
+.bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; padding: 8px 0; }
+.bars i { flex: 1; background: var(--lime); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
+.bars i[data-zero='1'] { background: var(--line); }
+.hours { display: flex; gap: 3px; font-size: 11px; color: var(--muted); }
+.hours span { flex: 1; text-align: center; }
+.formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.adm .btn.small { min-height: 38px; font-size: 14px; padding: 0 12px; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.login { max-width: 420px; margin: 12vh auto; padding: 0 16px; }
+.login > * + * { margin-top: 14px; }
+@media (max-width: 800px) { .adm { grid-template-columns: 1fr; } .adm nav { position: static; height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); } .adm nav .logo { width: 100%; } .adm main { padding: 16px; } }
