@@ -365,6 +365,8 @@ export function mapView(cfg) {
       if (!Array.isArray(coordinates) || coordinates.length < 2) {
         throw new Error('O serviço de rotas não retornou o caminho do motorista.');
       }
+      const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
+      const duration = Math.max(1, Number(data.durationMin) || 1);
       driverRouteCoordinates = coordinates;
       driverRoute.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
       if (!map.hasLayer(driverRoute)) driverRoute.addTo(map);
@@ -380,10 +382,6 @@ export function mapView(cfg) {
         map.fitBounds(bounds.pad(0.18), { maxZoom: 15, animate: true });
         hasFitDriverRoute = true;
       }
-      const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
-      const duration = Math.max(1, Number(data.durationMin) || 1);
-      note.textContent = `MOTORISTA · BIKE · ${distance} km · ${duration} min`;
-      note.classList.remove('map-note-error');
     } catch (error) {
       if (error.name === 'AbortError' || requestId !== driverRouteRequestId) return;
       console.warn('[map] falha ao calcular rota de bicicleta:', error);
