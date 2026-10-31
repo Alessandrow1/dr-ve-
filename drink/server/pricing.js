@@ -2,19 +2,21 @@
 import { roadKm } from './geo.js';
 
 export const DEFAULT_TARIFF = {
-  version: 'demo-2026-10',
-  baseFee: 12,
-  perKm: 3.2,
-  perMin: 0.6,
-  minimum: 22,
-  freePickupKm: 2, // deslocamento do motorista até o cliente: grátis até X km
-  pickupFeePerKm: 1.0,
-  nightSurchargePct: 20,
+  version: 'demo-2026-10-acessivel',
+  // Modelo inicial mais acessível para validar aceitação em Mossoró.
+  // Valores simulados: precisam ser validados com motoristas e custos reais antes do lançamento.
+  baseFee: 7,
+  perKm: 1.85,
+  perMin: 0.25,
+  minimum: 18,
+  freePickupKm: 3, // deslocamento de bicicleta até o cliente: grátis até 3 km
+  pickupFeePerKm: 0.65,
+  nightSurchargePct: 10,
   nightStartHour: 22,
   nightEndHour: 5,
-  commissionPct: 25,
-  cancelFeeEnRoute: 12,
-  cancelFeeArrived: 20,
+  commissionPct: 20,
+  cancelFeeEnRoute: 8,
+  cancelFeeArrived: 12,
   avgCarKmh: 28,
   avgBikeKmh: 14,
 };
