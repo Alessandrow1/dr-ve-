@@ -8,7 +8,7 @@ import * as S from './store.js';
 import * as R from './rides.js';
 import * as D from './drivers.js';
 import * as A from './admin.js';
-import { scheduleBot } from './dispatch.js';
+import { scheduleBot, resumeActiveBots } from './dispatch.js';
 import { subscribe, closeAll } from './events.js';
 import { PLACES, SERVICE_AREA, MAP_BOUNDS, haversineKm } from './geo.js';
 import { METHODS } from './payments.js';
@@ -505,6 +505,11 @@ export function createApp() {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   S.load();
+  // Recupera o fluxo do motorista simulado caso o servidor tenha sido fechado no meio da corrida.
+  resumeActiveBots(Object.values(S.db.rides));
+  for (const ride of Object.values(S.db.rides)) {
+    if (ride.state === 'procurando_motorista' && ride.demoAuto && !ride.driverId) scheduleBot(ride.id);
+  }
   const port = Number(process.env.PORT || 3000);
   createApp().listen(port, () => {
     console.log(`\n  Dr!nk (protótipo) rodando em http://localhost:${port}`);
