@@ -91,6 +91,20 @@ function registerDriverPickupIssue(ride, reason) {
   if (!driver || driver.isBot) return null;
 
   const at = now();
+  const declaredImpediment = db.incidents.find((incident) =>
+    incident.rideId === ride.id &&
+    incident.by === 'motorista' &&
+    ['emergencia', 'acidente', 'avaria'].includes(incident.kind) &&
+    incident.at <= at
+  );
+  if (declaredImpediment) {
+    audit('sistema', 'desempenho_motorista_justificado', driver.id, {
+      rideId: ride.id, incidentId: declaredImpediment.id, reason,
+    });
+    persist();
+    return 'justificado_por_ocorrencia';
+  }
+
   const previous = Array.isArray(driver.pickupIssues) ? driver.pickupIssues : [];
   const recent = previous.filter((event) => event.at >= at - DRIVER_ISSUE_WINDOW_MS);
   recent.push({ at, rideId: ride.id, reason });
