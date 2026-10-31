@@ -191,9 +191,21 @@ export function mapView(cfg) {
       '<a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">OSRM</a>',
   }).addTo(map);
 
+  const bikeRouteColor = (theme = getTheme()) => theme === 'light' ? '#3F454B' : '#FFFFFF';
+  const bikeRouteSwatch = routeLegend.querySelector('.bike-route-swatch');
+  const updateBikeRouteTheme = (theme = getTheme()) => {
+    const color = bikeRouteColor(theme);
+    driverRoute.setStyle({ color });
+    if (bikeRouteSwatch) {
+      bikeRouteSwatch.style.borderTopColor = color;
+      bikeRouteSwatch.style.borderTopStyle = 'solid';
+    }
+  };
+
   window.addEventListener('drink:theme-change', (event) => {
     const theme = event.detail?.theme === 'light' ? 'light' : 'dark';
     tiles.setUrl(tileUrls[theme]);
+    updateBikeRouteTheme(theme);
   });
 
   tiles.on('tileerror', () => {
@@ -217,10 +229,11 @@ export function mapView(cfg) {
   const route = L.polyline([], {
     color: '#B8FF5C', weight: 5, opacity: 0.96, lineCap: 'round', lineJoin: 'round',
   });
-  // A rota tracejada azul representa o deslocamento de bicicleta até o embarque.
+  // Linha contínua do deslocamento de bicicleta: branca no tema escuro e cinza no claro.
   const driverRoute = L.polyline([], {
-    color: '#65B8FF', weight: 5, opacity: 0.95, dashArray: '9 8', lineCap: 'round', lineJoin: 'round',
+    color: bikeRouteColor(), weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round',
   });
+  updateBikeRouteTheme();
   // Mantém uma única atribuição e a posiciona longe dos controles interativos.
   map.attributionControl.setPrefix(false);
   map.attributionControl.setPosition('topright');
