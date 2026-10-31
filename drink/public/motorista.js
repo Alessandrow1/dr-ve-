@@ -173,7 +173,6 @@ function paintActive(view, ride) {
       view.pickupMap.update({
         pickup: ride.pickup, dest: ride.destination,
         driver: ride.driverPosition, driverProgress: ride.driverProgress,
-      driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
         driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
       });
     }
@@ -197,6 +196,7 @@ function paintActive(view, ride) {
     view.pickupMap.update({
       pickup: ride.pickup, dest: ride.destination,
       driver: ride.driverPosition, driverProgress: ride.driverProgress,
+      driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
     });
     out.push(h('div', { class: 'pickup-navigation stack' },
       h('div', { class: 'banner' }, 'Siga a linha azul tracejada: ela mostra o caminho de bicicleta até o embarque. Sua posição é atualizada pelo GPS e acompanha a rota no mapa.'),
