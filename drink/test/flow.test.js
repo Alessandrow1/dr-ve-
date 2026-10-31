@@ -57,7 +57,10 @@ test('cotação transparente com linhas somando o total', async () => {
   const soma = Math.round(r.data.lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
   assert.equal(soma, r.data.total);
   assert.equal(r.data.demo, true);
-  assert.ok(r.data.total >= 22);
+  assert.ok(r.data.total >= 18);
+  assert.ok(r.data.total <= 25, 'trajeto Centro–Aeroporto deve ficar abaixo de R$ 25 nesta tabela de demonstração');
+  assert.equal(r.data.commissionPct, 20);
+  assert.equal(Math.round((r.data.platformFee + r.data.driverEarning) * 100) / 100, r.data.total);
 });
 
 test('rejeita fora da área e dados inválidos', async () => {
@@ -302,7 +305,7 @@ test('admin: tarifa valida limites, só afeta novos pedidos e é auditada', asyn
   assert.equal(old.data.quote.total, c.data.ride.quote.total, 'corrida existente mantém o preço');
   const a = await call('GET', '/api/admin/audit', { headers: AD });
   assert.ok(a.data.audit.some((x) => x.action === 'tarifa_alterada'));
-  await call('PUT', '/api/admin/tariff', { headers: AD, body: { baseFee: 12 } });
+  await call('PUT', '/api/admin/tariff', { headers: AD, body: { baseFee: 7 } });
   await call('POST', `/api/rides/${c.data.ride.id}/cancel`, { headers: { 'x-ride-token': c.data.token } });
 });
 
