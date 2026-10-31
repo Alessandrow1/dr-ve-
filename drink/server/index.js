@@ -181,19 +181,26 @@ route('GET', '/api/route', async (req) => {
     lat: Number(params.get('destLat')),
     lng: Number(params.get('destLng')),
   };
+  let stops = [];
+  try { stops = JSON.parse(params.get('stops') || '[]'); } catch { throw new R.HttpError(422, 'Paradas inválidas para calcular a rota.'); }
+  if (!Array.isArray(stops) || stops.length > 2) {
+    throw new R.HttpError(422, 'A rota aceita no máximo 2 paradas intermediárias.');
+  }
+  stops = stops.map((point) => ({ lat: Number(point?.lat), lng: Number(point?.lng) }));
 
   const validPoint = (p) =>
     Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
     Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
-  if (!validPoint(pickup) || !validPoint(dest)) {
+  const routePoints = [pickup, ...stops, dest];
+  if (routePoints.some((point) => !validPoint(point))) {
     throw new R.HttpError(422, 'Coordenadas inválidas para calcular a rota.');
   }
-  if (haversineKm(SERVICE_AREA.center, pickup) > SERVICE_AREA.radiusKm ||
-      haversineKm(SERVICE_AREA.center, dest) > SERVICE_AREA.radiusKm) {
-    throw new R.HttpError(422, 'A rota precisa começar e terminar dentro da área de Mossoró.');
+  if (routePoints.some((point) => haversineKm(SERVICE_AREA.center, point) > SERVICE_AREA.radiusKm)) {
+    throw new R.HttpError(422, 'Todos os pontos da rota precisam ficar dentro da área de Mossoró.');
   }
 
-  const cacheKey = [mode, pickup.lat, pickup.lng, dest.lat, dest.lng]
+  const routedPoints = mode === 'bike' ? [pickup, dest] : routePoints;
+  const cacheKey = [mode, ...routedPoints.flatMap((point) => [point.lat, point.lng])]
     .map((value) => typeof value === 'number' ? value.toFixed(5) : value).join(',');
   const cached = routeCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
@@ -246,7 +253,7 @@ route('GET', '/api/route', async (req) => {
   // Alternativa para bicicleta: instância pública FOSSGIS com perfil routed-bike.
   // Para carro, mantém o OSRM original sem mudança.
   if (!output) {
-    const coordinates = `${pickup.lng},${pickup.lat};${dest.lng},${dest.lat}`;
+    const coordinates = routedPoints.map((point) => `${point.lng},${point.lat}`).join(';');
     const baseUrl = mode === 'bike'
       ? 'https://routing.openstreetmap.de/routed-bike'
       : 'https://router.project-osrm.org';
