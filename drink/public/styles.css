@@ -266,3 +266,43 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
 .theme-toggle[aria-checked="true"] i { transform: translateX(26px); }
 .theme-toggle:focus-visible { outline: 3px solid var(--lime); outline-offset: 3px; }
 
+
+
+/* Confirmação e resultado de cancelamento */
+.cancel-dialog { gap: 14px; }
+.cancel-summary {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--ink);
+}
+.cancel-summary.free { border-color: rgba(125, 190, 76, .55); background: rgba(125, 190, 76, .08); }
+.cancel-summary.fee { border-color: rgba(230, 157, 75, .5); background: rgba(230, 157, 75, .08); }
+.cancel-icon, .cancel-result-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 25px;
+  font-weight: 900;
+  background: rgba(125, 190, 76, .16);
+  color: var(--lime);
+}
+.cancel-summary.fee .cancel-icon { background: rgba(230, 157, 75, .16); color: #d99b4c; }
+.cancel-copy { min-width: 0; display: grid; gap: 3px; }
+.cancel-kicker { display: block; color: var(--muted); font-size: 10px; letter-spacing: .1em; font-weight: 900; }
+.cancel-value { display: block; font-size: clamp(25px, 7vw, 34px); line-height: 1.1; font-weight: 900; letter-spacing: -.04em; color: var(--white); }
+.cancel-summary p { grid-column: 1 / -1; margin: 3px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.cancel-trip { display: grid; gap: 4px; padding: 14px 16px; }
+.cancel-trip b { overflow-wrap: anywhere; }
+.cancel-result-page { align-content: start; text-align: center; padding-top: 28px; }
+.cancel-result-mark { width: 68px; height: 68px; margin: 6px auto 0; font-size: 34px; }
+.cancel-result-mark.fee { background: rgba(230, 157, 75, .16); color: #d99b4c; }
+.cancel-result-page .cancel-summary { text-align: left; grid-template-columns: minmax(0, 1fr); gap: 7px; }
+.cancel-result-page .cancel-summary p { margin-top: 0; }
+.cancel-result-page .cancel-trip { text-align: left; }
