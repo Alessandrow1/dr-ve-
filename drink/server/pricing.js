@@ -51,9 +51,15 @@ export function cancellationPolicy(t) {
   ];
 }
 
-export function buildQuote({ pickup, dest, tariff = DEFAULT_TARIFF, onlineDrivers = [], now = new Date() }) {
-  const distanceKm = Math.max(1, roadKm(pickup, dest));
-  const durationMin = Math.max(5, Math.ceil((distanceKm / tariff.avgCarKmh) * 60));
+export function buildQuote({ pickup, dest, stops = [], tariff = DEFAULT_TARIFF, onlineDrivers = [], now = new Date() }) {
+  const routePoints = [pickup, ...stops, dest];
+  const distanceKm = Math.max(1, routePoints.slice(1).reduce(
+    (sum, point, index) => sum + roadKm(routePoints[index], point), 0,
+  ));
+  const drivingDurationMin = Math.max(5, Math.ceil((distanceKm / tariff.avgCarKmh) * 60));
+  // Cada parada inclui uma espera curta prevista de 5 minutos na demonstração.
+  const stopWaitMin = stops.length * 5;
+  const durationMin = drivingDurationMin + stopWaitMin;
 
   let pickupKm = 3;
   let etaEstimated = true;
@@ -67,14 +73,21 @@ export function buildQuote({ pickup, dest, tariff = DEFAULT_TARIFF, onlineDriver
   lines.push({ key: 'base', label: 'Tarifa base', amount: tariff.baseFee });
   lines.push({
     key: 'distance',
-    label: `Distância (${distanceKm.toFixed(1).replace('.', ',')} km × R$ ${tariff.perKm.toFixed(2).replace('.', ',')})`,
+    label: `Distância total (${distanceKm.toFixed(1).replace('.', ',')} km × R$ ${tariff.perKm.toFixed(2).replace('.', ',')})`,
     amount: r2(distanceKm * tariff.perKm),
   });
   lines.push({
     key: 'time',
-    label: `Tempo (${durationMin} min × R$ ${tariff.perMin.toFixed(2).replace('.', ',')})`,
-    amount: r2(durationMin * tariff.perMin),
+    label: `Tempo de direção (${drivingDurationMin} min × R$ ${tariff.perMin.toFixed(2).replace('.', ',')})`,
+    amount: r2(drivingDurationMin * tariff.perMin),
   });
+  if (stopWaitMin > 0) {
+    lines.push({
+      key: 'stop_wait',
+      label: `Espera nas paradas (${stops.length} × 5 min)`,
+      amount: r2(stopWaitMin * tariff.perMin),
+    });
+  }
   const pickupExtra = r2(Math.max(0, pickupKm - tariff.freePickupKm) * tariff.pickupFeePerKm);
   if (pickupExtra > 0) {
     lines.push({
@@ -100,6 +113,9 @@ export function buildQuote({ pickup, dest, tariff = DEFAULT_TARIFF, onlineDriver
     demo: true,
     tariffVersion: tariff.version,
     distanceKm,
+    drivingDurationMin,
+    stopWaitMin,
+    stopsCount: stops.length,
     durationMin,
     pickupKm: Math.round(pickupKm * 10) / 10,
     etaMin,
@@ -112,7 +128,6 @@ export function buildQuote({ pickup, dest, tariff = DEFAULT_TARIFF, onlineDriver
     cancellationPolicy: cancellationPolicy(tariff),
   };
 }
-
 export function cancelFee(state, tariff = DEFAULT_TARIFF) {
   if (state === 'motorista_a_caminho') return tariff.cancelFeeEnRoute;
   if (state === 'motorista_chegou' || state === 'verificacao_pre_servico') return tariff.cancelFeeArrived;
