@@ -165,6 +165,7 @@ export function mapView(cfg) {
   };
   const tiles = L.tileLayer(tileUrls[getTheme()], {
     maxZoom: 20,
+    referrerPolicy: 'strict-origin-when-cross-origin',
     attribution:
       '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> · ' +
       '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · ' +
