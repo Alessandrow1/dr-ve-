@@ -210,6 +210,12 @@ export function mapView(cfg) {
   let routeTimer = null;
   let routeCoordinates = [];
   let driverRouteCoordinates = [];
+  let driverRouteSegments = [];
+  let driverRouteLengthKm = 0;
+  let currentDriverPickupProgress = null;
+  let displayedDriverPickupProgress = null;
+  let currentDriverRouteStart = null;
+  let driverPickupAnimationFrame = null;
   let driverRouteKey = '';
   let driverRouteRequestId = 0;
   let driverRouteController = null;
@@ -312,12 +318,100 @@ export function mapView(cfg) {
     return best && Math.sqrt(bestDistanceSq) <= maxDistanceKm * 1000 ? best : point;
   }
 
+  function buildDriverRouteMetrics(coordinates) {
+    driverRouteCoordinates = Array.isArray(coordinates) ? coordinates : [];
+    driverRouteSegments = [];
+    driverRouteLengthKm = 0;
+    for (let i = 1; i < driverRouteCoordinates.length; i++) {
+      const a = driverRouteCoordinates[i - 1];
+      const b = driverRouteCoordinates[i];
+      const lengthKm = haversineKm(
+        { lat: Number(a[1]), lng: Number(a[0]) },
+        { lat: Number(b[1]), lng: Number(b[0]) },
+      );
+      if (!Number.isFinite(lengthKm)) continue;
+      driverRouteSegments.push({ a, b, lengthKm, startKm: driverRouteLengthKm });
+      driverRouteLengthKm += lengthKm;
+    }
+  }
+
+  function driverRoutePointAt(progress) {
+    if (!driverRouteSegments.length || driverRouteLengthKm <= 0) return null;
+    const targetKm = Math.max(0, Math.min(1, Number(progress))) * driverRouteLengthKm;
+    for (let i = 0; i < driverRouteSegments.length; i++) {
+      const segment = driverRouteSegments[i];
+      const endKm = segment.startKm + segment.lengthKm;
+      if (targetKm <= endKm || i === driverRouteSegments.length - 1) {
+        const ratio = segment.lengthKm > 0
+          ? Math.max(0, Math.min(1, (targetKm - segment.startKm) / segment.lengthKm))
+          : 0;
+        return {
+          lat: Number(segment.a[1]) + (Number(segment.b[1]) - Number(segment.a[1])) * ratio,
+          lng: Number(segment.a[0]) + (Number(segment.b[0]) - Number(segment.a[0])) * ratio,
+        };
+      }
+    }
+    const last = driverRouteCoordinates[driverRouteCoordinates.length - 1];
+    return last ? { lat: Number(last[1]), lng: Number(last[0]) } : null;
+  }
+
+  function stopDriverPickupAnimation() {
+    if (driverPickupAnimationFrame != null) cancelAnimationFrame(driverPickupAnimationFrame);
+    driverPickupAnimationFrame = null;
+  }
+
   function setDriverMarker(point) {
-    const snapped = driverRouteCoordinates.length
-      ? nearestPointOnGeometry(point, driverRouteCoordinates)
-      : point;
-    setMarker(driver, snapped);
+    let markerPoint = point;
+    if (currentDriverPickupProgress != null) {
+      // Na simulação, o marcador só se move pela geometria viária. Antes da rota chegar,
+      // fica parado na origem em vez de desenhar um movimento diagonal falso.
+      markerPoint = driverRouteSegments.length
+        ? driverRoutePointAt(displayedDriverPickupProgress ?? currentDriverPickupProgress)
+        : currentDriverRouteStart || point;
+    } else if (driverRouteCoordinates.length) {
+      markerPoint = nearestPointOnGeometry(point, driverRouteCoordinates);
+    }
+    setMarker(driver, markerPoint);
     if (map.hasLayer(driver)) driver.bringToFront();
+  }
+
+  function showDriverPickupProgress(progress, animate = false) {
+    if (progress == null || !Number.isFinite(Number(progress))) {
+      stopDriverPickupAnimation();
+      currentDriverPickupProgress = null;
+      displayedDriverPickupProgress = null;
+      setDriverMarker(currentDriverPosition);
+      return;
+    }
+    const target = Math.max(0, Math.min(1, Number(progress)));
+    currentDriverPickupProgress = target;
+    if (!driverRouteSegments.length) {
+      displayedDriverPickupProgress = target;
+      setDriverMarker(currentDriverPosition);
+      return;
+    }
+    if (!animate || displayedDriverPickupProgress == null || target <= displayedDriverPickupProgress) {
+      stopDriverPickupAnimation();
+      displayedDriverPickupProgress = target;
+      setDriverMarker(currentDriverPosition);
+      return;
+    }
+    stopDriverPickupAnimation();
+    const from = displayedDriverPickupProgress;
+    const startedAt = performance.now();
+    const durationMs = 2200;
+    const tick = (nowMs) => {
+      const fraction = Math.max(0, Math.min(1, (nowMs - startedAt) / durationMs));
+      displayedDriverPickupProgress = from + (target - from) * fraction;
+      setDriverMarker(currentDriverPosition);
+      if (fraction < 1) {
+        driverPickupAnimationFrame = requestAnimationFrame(tick);
+      } else {
+        displayedDriverPickupProgress = target;
+        driverPickupAnimationFrame = null;
+      }
+    };
+    driverPickupAnimationFrame = requestAnimationFrame(tick);
   }
 
   function clearDriverRoute() {
@@ -330,6 +424,11 @@ export function mapView(cfg) {
     routeLegend.hidden = true;
     routeLegendLabel.textContent = 'Motorista · rota de bicicleta';
     driverRouteCoordinates = [];
+    driverRouteSegments = [];
+    driverRouteLengthKm = 0;
+    stopDriverPickupAnimation();
+    currentDriverPickupProgress = null;
+    displayedDriverPickupProgress = null;
     driverRouteKey = '';
     lastDriverRouteOrigin = null;
     lastDriverRouteDestination = null;
@@ -367,7 +466,7 @@ export function mapView(cfg) {
       }
       const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
       const duration = Math.max(1, Number(data.durationMin) || 1);
-      driverRouteCoordinates = coordinates;
+      buildDriverRouteMetrics(coordinates);
       driverRoute.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
       if (!map.hasLayer(driverRoute)) driverRoute.addTo(map);
       driverRoute.bringToFront();
@@ -375,7 +474,11 @@ export function mapView(cfg) {
       routeLegend.hidden = false;
       pickup.bringToFront();
       dest.bringToFront();
-      setDriverMarker(currentDriverPosition);
+      if (currentDriverPickupProgress != null) {
+        showDriverPickupProgress(currentDriverPickupProgress, false);
+      } else {
+        setDriverMarker(currentDriverPosition);
+      }
       if (!hasFitDriverRoute) {
         const bounds = driverRoute.getBounds();
         if (map.hasLayer(route)) bounds.extend(route.getBounds());
@@ -416,7 +519,9 @@ export function mapView(cfg) {
       : 0;
     driverRouteTimer = setTimeout(() => {
       driverRouteTimer = null;
-      const latestFrom = currentDriverPosition;
+      const latestFrom = currentDriverPickupProgress != null && currentDriverRouteStart
+        ? currentDriverRouteStart
+        : currentDriverPosition;
       const latestTo = currentPickupPoint;
       if (!latestFrom || !latestTo || haversineKm(latestFrom, latestTo) <= 0.08) {
         clearDriverRoute();
@@ -556,10 +661,12 @@ export function mapView(cfg) {
 
   return {
     el,
-    update({ pickup: pk, dest: ds, driver: dr, driverProgress: progress }) {
+    update({ pickup: pk, dest: ds, driver: dr, driverProgress: progress, driverPickupProgress: pickupProgress, driverRouteStart }) {
       currentDriverPosition = dr || null;
       currentPickupPoint = pk || null;
+      currentDriverRouteStart = driverRouteStart || null;
       const previousProgress = currentDriverProgress;
+      const previousPickupProgress = currentDriverPickupProgress;
       currentDriverProgress = progress == null || !Number.isFinite(Number(progress))
         ? null
         : Math.max(0, Math.min(1, Number(progress)));
@@ -570,7 +677,14 @@ export function mapView(cfg) {
         currentDriverProgress,
         previousProgress != null && currentDriverProgress != null && currentDriverProgress > previousProgress,
       );
-      if (currentDriverPosition && pk) scheduleDriverRoadRoute(currentDriverPosition, pk);
+      showDriverPickupProgress(
+        pickupProgress,
+        previousPickupProgress != null && pickupProgress != null && pickupProgress > previousPickupProgress,
+      );
+      const routeOrigin = currentDriverPickupProgress != null && currentDriverRouteStart
+        ? currentDriverRouteStart
+        : currentDriverPosition;
+      if (routeOrigin && pk) scheduleDriverRoadRoute(routeOrigin, pk);
       else clearDriverRoute();
 
       if (pk && ds) {
