@@ -272,7 +272,7 @@ function positionInfo(ride) {
           progress: null,
         };
       }
-      const tripDurationMs = T + (Number(ride.quote.stopWaitMin) || 0) * 60 * 1000 * Number(process.env.DEMO_SPEED || 1);
+      const tripDurationMs = T + (ride.stops || []).length * 5000 * Number(process.env.DEMO_SPEED || 1);
       const t = Math.max(0, Math.min(1, elapsed / tripDurationMs));
       return {
         pos: routePointAtProgress(ride, t),
