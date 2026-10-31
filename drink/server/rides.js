@@ -51,6 +51,84 @@ const DEMO_TRAVEL_MS = () => Math.max(300, 12000 * Number(process.env.DEMO_SPEED
 const tariff = () => DEFAULT_TARIFF;
 const now = () => Date.now();
 
+const PICKUP_NO_PROGRESS_MS = 3 * 60 * 1000;
+const PICKUP_LATE_GRACE_MS = 5 * 60 * 1000;
+const PICKUP_GPS_FRESH_MS = 25 * 1000;
+const DRIVER_ISSUE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DRIVER_REPEAT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const DRIVER_COOLDOWN_MS = 30 * 60 * 1000;
+
+function pickupCancellationPolicy(ride, at = now()) {
+  const regularFee = cancelFee(ride.state, tariff());
+  const driver = ride.driverId ? db.drivers[ride.driverId] : null;
+  const progress = ride.pickupProgress;
+
+  if (driver && !driver.isBot && progress) {
+    const lateOnArrival = Boolean(progress.lateArrivalAt) &&
+      ['motorista_chegou', 'verificacao_pre_servico'].includes(ride.state);
+    const lateOnTheWay = ride.state === 'motorista_a_caminho' &&
+      Number.isFinite(progress.expectedArrivalAt) &&
+      at >= progress.expectedArrivalAt + PICKUP_LATE_GRACE_MS;
+    const gpsIsFresh = Boolean(driver.posAt) && at - driver.posAt <= PICKUP_GPS_FRESH_MS;
+    const stoppedWithoutProgress = ride.state === 'motorista_a_caminho' &&
+      gpsIsFresh && Number.isFinite(progress.lastProgressAt) &&
+      at - progress.lastProgressAt >= PICKUP_NO_PROGRESS_MS;
+
+    if (lateOnArrival || lateOnTheWay) {
+      return { fee: 0, eligible: true, reason: 'motorista_atrasado' };
+    }
+    if (stoppedWithoutProgress) {
+      return { fee: 0, eligible: true, reason: 'motorista_sem_progresso' };
+    }
+  }
+
+  return { fee: regularFee, eligible: regularFee === 0, reason: null };
+}
+
+function registerDriverPickupIssue(ride, reason) {
+  const driver = ride.driverId ? db.drivers[ride.driverId] : null;
+  if (!driver || driver.isBot) return null;
+
+  const at = now();
+  const previous = Array.isArray(driver.pickupIssues) ? driver.pickupIssues : [];
+  const recent = previous.filter((event) => event.at >= at - DRIVER_ISSUE_WINDOW_MS);
+  recent.push({ at, rideId: ride.id, reason });
+  driver.pickupIssues = recent;
+
+  const last7Days = recent.filter((event) => event.at >= at - DRIVER_REPEAT_WINDOW_MS).length;
+  let penalty = 'advertencia';
+  if (recent.length >= 3) {
+    driver.status = 'em_analise';
+    driver.online = false;
+    driver.cooldownUntil = 0;
+    penalty = 'revisao_administrativa';
+  } else if (last7Days >= 2) {
+    driver.cooldownUntil = at + DRIVER_COOLDOWN_MS;
+    driver.online = false;
+    penalty = 'pausa_30_minutos';
+  }
+
+  db.incidents.push({
+    id: nextId('inc'),
+    rideId: ride.id,
+    driverId: driver.id,
+    by: 'sistema',
+    kind: reason,
+    text: reason === 'motorista_sem_progresso'
+      ? 'O cliente cancelou sem custo após 3 minutos sem avanço detectável do motorista, com GPS recente.'
+      : 'O cliente cancelou sem custo porque a chegada ultrapassou em pelo menos 5 minutos a previsão original.',
+    at,
+    status: 'em_analise',
+    penalty,
+  });
+  audit('sistema', 'desempenho_motorista_sinalizado', driver.id, {
+    rideId: ride.id, rideCode: ride.code, reason, issues7d: last7Days, issues30d: recent.length, penalty,
+  });
+  persist();
+  publish('drivers', 'requests', {});
+  return penalty;
+}
+
 // ---------- utilidades ----------
 export function onlineDrivers() {
   return Object.values(db.drivers).filter((d) => d.online && d.status === 'aprovado' && !d.isBot);
@@ -201,6 +279,7 @@ export function view(ride, role) {
     };
   }
   // client
+  const cancelPolicy = pickupCancellationPolicy(ride);
   return {
     ...base,
     customer: { name: ride.customer.name },
@@ -213,7 +292,8 @@ export function view(ride, role) {
     shareUrl: ride.shareToken ? `/acompanhar.html?t=${ride.shareToken}` : null,
     paymentMethod: ride.paymentMethod,
     payment: ride.payment,
-    currentCancelFee: isActive(ride) ? cancelFee(ride.state, tariff()) : 0,
+    cancelPolicy,
+    currentCancelFee: isActive(ride) ? cancelPolicy.fee : 0,
     canCancel: [
       'aguardando_confirmacao',
       'procurando_motorista',
@@ -338,7 +418,12 @@ export async function cancelRide(id, who, { token, driverId, reason, fee: forced
     ],
     'Após o início do serviço não é possível cancelar. Use o botão de suporte/emergência.',
   );
-  const fee = forcedFee ?? (who === 'cliente' ? cancelFee(ride.state, tariff()) : 0);
+  const cancelPolicy = who === 'cliente' ? pickupCancellationPolicy(ride) : null;
+  const policyReason = cancelPolicy?.eligible && ['motorista_sem_progresso', 'motorista_atrasado'].includes(cancelPolicy.reason)
+    ? cancelPolicy.reason
+    : null;
+  const fee = forcedFee ?? (who === 'cliente' ? cancelPolicy.fee : 0);
+  const driverPenalty = policyReason ? registerDriverPickupIssue(ride, policyReason) : null;
   const prov = getProvider();
   if (ride.payment?.status === 'autorizado') {
     if (fee > 0) {
@@ -351,7 +436,13 @@ export async function cancelRide(id, who, { token, driverId, reason, fee: forced
       ride.payment = { ...ride.payment, status: 'cancelado', charged: 0 };
     }
   }
-  ride.cancel = { by: who, reason: reason || 'cancelado_pelo_cliente', fee, driverId: driverId || null };
+  ride.cancel = {
+    by: who,
+    reason: reason || policyReason || 'cancelado_pelo_cliente',
+    fee,
+    driverId: driverId || null,
+    driverPenalty,
+  };
   go(ride, 'cancelado', who, 'cancelar', { reason: ride.cancel.reason, fee });
   return ride;
 }
@@ -484,6 +575,11 @@ export function openRequests(driverId) {
 
 export function setOnline(driverId, online, pos) {
   const d = requireDriver(driverId);
+  if (online && d.cooldownUntil > now()) {
+    const remaining = Math.ceil((d.cooldownUntil - now()) / 60000);
+    throw new HttpError(403, `Pausa temporária por cancelamentos repetidos. Tente novamente em ${remaining} min.`);
+  }
+  if (online && d.cooldownUntil && d.cooldownUntil <= now()) d.cooldownUntil = 0;
   if (online && d.status !== 'aprovado') {
     throw new HttpError(403, 'Seu cadastro ainda não foi aprovado pela operação.');
   }
@@ -493,6 +589,7 @@ export function setOnline(driverId, online, pos) {
   d.online = !!online;
   if (pos && Number.isFinite(+pos.lat) && Number.isFinite(+pos.lng)) {
     d.pos = { lat: +pos.lat, lng: +pos.lng };
+    d.posAccuracy = Number.isFinite(Number(pos.accuracy)) ? Math.max(0, Number(pos.accuracy)) : d.posAccuracy;
     d.posAt = now();
   }
   persist();
@@ -504,7 +601,20 @@ export function updateLocation(driverId, pos) {
   const d = requireDriver(driverId);
   if (!pos || !Number.isFinite(+pos.lat) || !Number.isFinite(+pos.lng)) throw new HttpError(422, 'Posição inválida.');
   d.pos = { lat: +pos.lat, lng: +pos.lng };
+  d.posAccuracy = Number.isFinite(Number(pos.accuracy)) ? Math.max(0, Number(pos.accuracy)) : d.posAccuracy;
   d.posAt = now();
+
+  const ride = driverActiveRide(driverId);
+  if (ride?.state === 'motorista_a_caminho' && ride.pickupProgress) {
+    const distanceKm = roadKm(d.pos, ride.pickup);
+    const accuracyKm = Math.max(0, Math.min(0.15, ((d.posAccuracy || 25) + 25) / 1000));
+    const movementThresholdKm = Math.max(0.05, accuracyKm);
+    if (distanceKm <= ride.pickupProgress.closestDistanceKm - movementThresholdKm) {
+      ride.pickupProgress.closestDistanceKm = distanceKm;
+      ride.pickupProgress.lastProgressAt = now();
+      persist();
+    }
+  }
   return d;
 }
 
@@ -545,13 +655,27 @@ export function departRide(id, driverId) {
   const ride = getRide(id);
   authDriverFor(ride, driverId);
   requireState(ride, ['motorista_encontrado']);
-  go(ride, 'motorista_a_caminho', 'motorista', 'iniciar_deslocamento');
+  const d = requireDriver(driverId);
+  const startedAt = now();
+  const distanceKm = roadKm(d.pos, ride.pickup);
+  const etaMin = Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60));
+  ride.pickupProgress = {
+    startedAt,
+    expectedArrivalAt: startedAt + etaMin * 60 * 1000,
+    lastProgressAt: startedAt,
+    closestDistanceKm: distanceKm,
+  };
+  go(ride, 'motorista_a_caminho', 'motorista', 'iniciar_deslocamento', { etaOriginalMin: etaMin });
   return ride;
 }
 export function arriveRide(id, driverId) {
   const ride = getRide(id);
   authDriverFor(ride, driverId);
   requireState(ride, ['motorista_a_caminho']);
+  if (ride.pickupProgress?.expectedArrivalAt &&
+      now() >= ride.pickupProgress.expectedArrivalAt + PICKUP_LATE_GRACE_MS) {
+    ride.pickupProgress.lateArrivalAt = now();
+  }
   go(ride, 'motorista_chegou', 'motorista', 'chegar');
   return ride;
 }
