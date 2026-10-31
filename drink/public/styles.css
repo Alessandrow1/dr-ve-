@@ -395,3 +395,16 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
 .pickup-navigation .mapwrap { min-height: 250px; height: 34dvh; max-height: 360px; border-radius: 20px; overflow: hidden; }
 .pickup-navigation .mapwrap .leaflet-map { min-height: 250px; height: 100%; }
 .pickup-navigation .banner { margin: 0; }
+
+
+/* Orçamento detalhado e cartões de perfil */
+.quote-breakdown { margin-top: 2px; padding-top: 9px; border-top: 1px solid var(--line); }
+.quote-breakdown summary { cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 700; padding: 5px 0; }
+.driver-profile-card { display: flex; align-items: center; gap: 13px; }
+.driver-profile-avatar { flex: none; width: 48px; height: 48px; }
+.driver-profile-copy { min-width: 0; flex: 1; }
+.driver-profile-copy > .row { gap: 8px; }
+.driver-profile-copy > .row > b { overflow-wrap: anywhere; }
+.driver-profile-note { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.driver-own-profile { margin: 10px 14px; padding: 13px; border: 1px solid var(--line); border-radius: 16px; background: var(--graphite); }
+:root[data-theme="light"] .driver-own-profile { background: #ffffff; border-color: #dce4dc; }
