@@ -543,7 +543,7 @@ const HEADLINE = {
 const HINT = {
   aguardando_confirmacao: 'Seu pedido ainda não foi confirmado. Confirme para procurar um motorista.',
   procurando_motorista: 'Estamos avisando os motoristas disponíveis perto de você.',
-  motorista_encontrado: 'Ele aceitou a solicitação. Se ficar 3 minutos sem avançar com GPS ativo ou atrasar mais de 5 minutos da previsão, você poderá cancelar sem cobrança.',
+  motorista_encontrado: 'Ele aceitou a solicitação. Se ficar 3 minutos sem avançar com GPS ativo ou atrasar 5 minutos ou mais além da previsão, você poderá cancelar sem cobrança.',
   motorista_a_caminho: 'Ele chega de bicicleta ou scooter dobrável. Se ficar 3 minutos sem avançar com GPS ativo ou passar 5 minutos da previsão, você poderá cancelar sem cobrança.',
   motorista_chegou: 'Confira nome e identificação antes de entregar a chave.',
   verificacao_pre_servico: 'Ele confere você, o carro e o equipamento. Só informe o código quando a identificação bater.',
