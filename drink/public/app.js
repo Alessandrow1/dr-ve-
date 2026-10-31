@@ -7,8 +7,8 @@ let me = store.get('me', null);
 if (!me) { me = { id: uid(), name: '', phone: '' }; store.set('me', me); }
 
 const S = {
-  pickup: { placeId: 'centro' },
-  dest: null, // {placeId}
+  pickup: null, // endereço selecionado pelo cliente ou localização atual
+  dest: null, // endereço selecionado pelo cliente
   quote: null,
   pay: store.get('pay', 'pix'),
   ride: null,
@@ -17,8 +17,8 @@ const S = {
   poll: null,
 };
 const authH = () => ({ 'x-ride-token': S.token });
-const placeName = (p) => (p.placeId ? cfg.places.find((x) => x.id === p.placeId)?.name : p.label) || '';
-const placePoint = (p) => (p.placeId ? cfg.places.find((x) => x.id === p.placeId) : p);
+const placeName = (p) => (p?.placeId ? cfg.places.find((x) => x.id === p.placeId)?.name : p?.label) || '';
+const placePoint = (p) => (p?.placeId ? cfg.places.find((x) => x.id === p.placeId) : p);
 
 const MENU_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
 const KEY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v4M21 12v3"/></svg>';
@@ -139,31 +139,169 @@ function showHome() {
   const err = h('div', { class: 'error', role: 'alert' });
   const quoteBox = h('div', { class: 'stack' });
   const cta = h('button', { class: 'btn', disabled: true, onclick: () => showRequest() }, 'Solicitar motorista');
-  const destInput = h('input', { type: 'search', placeholder: 'Para onde você vai?', autocomplete: 'off', 'aria-label': 'Destino', enterkeyhint: 'search' });
-  const suggest = h('div', { class: 'chips', role: 'group', 'aria-label': 'Sugestões de destino' });
-  const pickSel = h('select', { 'aria-label': 'Local de embarque', onchange: () => { S.pickup = { placeId: pickSel.value }; refresh(); } },
-    cfg.places.map((p) => h('option', { value: p.id }, p.name)));
-  const gpsBtn = h('button', { class: 'btn ghost small', onclick: useGps }, 'Usar minha localização');
-  pickSel.value = S.pickup.placeId || '';
 
-  function paintSuggest() {
-    const q = norm(destInput.value.trim());
-    const items = cfg.places.filter((p) => !q || norm(p.name).includes(q)).slice(0, 8);
-    suggest.replaceChildren(...(items.length ? items.map((p) => h('button', { class: 'chip', 'aria-pressed': String(S.dest?.placeId === p.id), onclick: () => { S.dest = { placeId: p.id }; destInput.value = p.name; paintSuggest(); refresh(); } }, p.name))
-      : [h('p', { class: 'muted' }, 'Nenhum destino encontrado. Nesta demonstração só há bairros de Mossoró; a busca por endereço depende de um provedor de mapas.')]));
+  const pickupInput = h('input', {
+    type: 'search', placeholder: 'Rua, número e bairro', autocomplete: 'off',
+    'aria-label': 'Endereço de embarque', enterkeyhint: 'search',
+  });
+  const destInput = h('input', {
+    type: 'search', placeholder: 'Rua, número e bairro', autocomplete: 'off',
+    'aria-label': 'Endereço de destino', enterkeyhint: 'search',
+  });
+  const pickupResults = h('div', { class: 'address-results', role: 'listbox', 'aria-label': 'Sugestões de embarque' });
+  const destResults = h('div', { class: 'address-results', role: 'listbox', 'aria-label': 'Sugestões de destino' });
+  const gpsBtn = h('button', { class: 'btn ghost small location-pickup', onclick: useGps }, 'Usar minha localização no embarque');
+
+  const cache = new Map();
+  const timers = { pickup: null, dest: null };
+  const controllers = { pickup: null, dest: null };
+  let lastSearchAt = 0;
+
+  function renderEmpty(container, message) {
+    container.replaceChildren(h('p', { class: 'muted small address-message' }, message));
   }
-  destInput.addEventListener('input', () => { S.dest = null; S.quote = null; paintSuggest(); paintQuote(); });
+
+  function describeFeature(feature, typedQuery) {
+    const props = feature.properties || {};
+    const coords = feature.geometry && feature.geometry.coordinates;
+    const lng = coords && Number(coords[0]);
+    const lat = coords && Number(coords[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    const street = props.street || props.name || typedQuery;
+    const number = props.housenumber ? String(props.housenumber) : '';
+    const main = number && props.street ? props.street + ', ' + number : street;
+    const district = props.district || props.suburb || props.locality || props.city_district || '';
+    const city = props.city || props.county || 'Mossoró';
+    const state = props.state || 'RN';
+    const parts = [main, district, city, state].filter(Boolean);
+    const label = parts.filter((value, index) => parts.indexOf(value) === index).join(', ');
+    const typedNumber = typedQuery.match(/(?:^|\s|,)(\d+[A-Za-z]?)\b/);
+    const numberConfirmed = !typedNumber || (number && number.toLowerCase() === typedNumber[1].toLowerCase());
+    const subtitle = [district, city, state].filter(Boolean).join(' · ');
+    return {
+      point: { lat, lng, label },
+      title: main || typedQuery,
+      subtitle: numberConfirmed ? subtitle : subtitle + ' · número não confirmado no mapa',
+    };
+  }
+
+  async function searchAddress(kind, input, container) {
+    const query = input.value.trim();
+    if (query.length < 4) return;
+    const cacheKey = query.toLocaleLowerCase('pt-BR');
+    let results = cache.get(cacheKey);
+
+    try {
+      if (!results) {
+        const wait = Math.max(0, 1100 - (Date.now() - lastSearchAt));
+        if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+        if (input.value.trim() !== query) return;
+        lastSearchAt = Date.now();
+
+        controllers[kind] = new AbortController();
+        const url = new URL('https://photon.komoot.io/api/');
+        url.searchParams.set('q', query + ', Mossoró, Rio Grande do Norte, Brasil');
+        url.searchParams.set('lat', String(cfg.area.center.lat));
+        url.searchParams.set('lon', String(cfg.area.center.lng));
+        url.searchParams.set('zoom', '14');
+        url.searchParams.set('limit', '8');
+        url.searchParams.set('lang', 'pt');
+
+        const response = await fetch(url, {
+          headers: { Accept: 'application/json' },
+          signal: controllers[kind].signal,
+        });
+        if (!response.ok) throw new Error('O serviço de endereços não respondeu. Tente novamente.');
+        const data = await response.json();
+        results = (data.features || [])
+          .map((feature) => describeFeature(feature, query))
+          .filter((item) => item && haversineKm(cfg.area.center, item.point) <= cfg.area.radiusKm);
+        cache.set(cacheKey, results);
+      }
+
+      if (input.value.trim() !== query) return;
+      if (!results.length) {
+        renderEmpty(container, 'Não encontramos esse endereço na área de Mossoró. Confira rua, número e bairro.');
+        return;
+      }
+
+      container.replaceChildren(...results.map((result) =>
+        h('button', {
+          class: 'address-result', type: 'button', role: 'option',
+          onclick: () => {
+            if (kind === 'pickup') {
+              S.pickup = result.point;
+              pickupInput.value = result.point.label;
+            } else {
+              S.dest = result.point;
+              destInput.value = result.point.label;
+            }
+            container.replaceChildren();
+            refresh();
+          },
+        },
+          h('span', { class: 'address-result-icon', 'aria-hidden': 'true' }, kind === 'pickup' ? '●' : '◆'),
+          h('span', { class: 'address-result-copy' },
+            h('strong', {}, result.title),
+            h('small', {}, result.subtitle || 'Mossoró, RN')))));
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      if (input.value.trim() === query) {
+        renderEmpty(container, e.message || 'Não foi possível buscar o endereço. Verifique sua conexão.');
+      }
+    }
+  }
+
+  function scheduleSearch(kind, input, container) {
+    clearTimeout(timers[kind]);
+    controllers[kind]?.abort();
+    if (kind === 'pickup') S.pickup = null;
+    else S.dest = null;
+    S.quote = null;
+    paintQuote();
+    map.update({ pickup: null, dest: null });
+
+    const query = input.value.trim();
+    if (query.length < 4) {
+      container.replaceChildren();
+      return;
+    }
+    renderEmpty(container, 'Buscando endereço em Mossoró…');
+    timers[kind] = setTimeout(() => searchAddress(kind, input, container), 850);
+  }
+
+  pickupInput.addEventListener('input', () => scheduleSearch('pickup', pickupInput, pickupResults));
+  destInput.addEventListener('input', () => scheduleSearch('dest', destInput, destResults));
+  pickupInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timers.pickup); searchAddress('pickup', pickupInput, pickupResults); }
+  });
+  destInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timers.dest); searchAddress('dest', destInput, destResults); }
+  });
 
   function useGps() {
     err.textContent = '';
-    if (!navigator.geolocation) { err.textContent = 'Este aparelho não oferece localização. Escolha o embarque na lista.'; return; }
+    if (!navigator.geolocation) {
+      err.textContent = 'Este aparelho não oferece localização. Digite o endereço de embarque.';
+      return;
+    }
     busy(gpsBtn, true);
     navigator.geolocation.getCurrentPosition((pos) => {
       busy(gpsBtn, false);
-      const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      if (haversineKm(cfg.area.center, p) > cfg.area.radiusKm) { err.textContent = `Sua localização está fora da área de atendimento (${cfg.area.name}). Escolha o embarque na lista.`; return; }
-      S.pickup = { ...p, label: 'Minha localização' }; pickSel.value = ''; refresh();
-    }, () => { busy(gpsBtn, false); err.textContent = 'Não foi possível obter sua localização. Libere a permissão ou escolha o embarque na lista.'; }, { enableHighAccuracy: true, timeout: 10000 });
+      const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      if (haversineKm(cfg.area.center, point) > cfg.area.radiusKm) {
+        err.textContent = 'Sua localização está fora da área de atendimento (' + cfg.area.name + ').';
+        return;
+      }
+      S.pickup = { ...point, label: 'Minha localização' };
+      pickupInput.value = 'Minha localização';
+      pickupResults.replaceChildren();
+      refresh();
+    }, () => {
+      busy(gpsBtn, false);
+      err.textContent = 'Não foi possível obter sua localização. Libere a permissão ou digite o endereço.';
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
   }
 
   function paintQuote() {
@@ -171,26 +309,58 @@ function showHome() {
     cta.disabled = !q;
     if (!q) { quoteBox.replaceChildren(); return; }
     quoteBox.replaceChildren(h('div', { class: 'row between' },
-      h('div', {}, h('div', { class: 'price' }, brl(q.total), h('small', {}, 'estimativa')), h('p', { class: 'muted' }, `${km(q.distanceKm)} · cerca de ${q.durationMin} min de viagem`)),
-      h('div', { style: 'text-align:right' }, h('span', { class: 'pill lime' }, `Chega em ~${q.etaMin} min`), q.etaEstimated ? h('p', { class: 'muted small' }, 'tempo estimado') : null)));
+      h('div', {}, h('div', { class: 'price' }, brl(q.total), h('small', {}, 'estimativa')),
+        h('p', { class: 'muted' }, km(q.distanceKm) + ' · cerca de ' + q.durationMin + ' min de viagem')),
+      h('div', { style: 'text-align:right' },
+        h('span', { class: 'pill lime' }, 'Chega em ~' + q.etaMin + ' min'),
+        q.etaEstimated ? h('p', { class: 'muted small' }, 'tempo estimado') : null)));
   }
+
   async function refresh() {
     err.textContent = '';
-    map.update({ pickup: placePoint(S.pickup), dest: S.dest ? placePoint(S.dest) : null });
-    if (!S.dest) { S.quote = null; paintQuote(); return; }
+    map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest) });
+    if (!S.pickup || !S.dest) {
+      S.quote = null;
+      paintQuote();
+      return;
+    }
     cta.disabled = true;
-    try { S.quote = await api('POST', '/api/quote', { body: { pickup: S.pickup, destination: S.dest } }); }
-    catch (e) { S.quote = null; err.textContent = e.message; }
+    try {
+      S.quote = await api('POST', '/api/quote', {
+        body: { pickup: S.pickup, destination: S.dest },
+      });
+    } catch (e) {
+      S.quote = null;
+      err.textContent = e.message;
+    }
     paintQuote();
   }
 
-  frame(topbar(), h('main', { class: 'screen' }, map.el,
+  frame(topbar(), h('main', { class: 'screen' },
+    map.el,
     h('section', { class: 'sheet stack' },
-      h('h1', {}, 'Bebeu? A gente dirige.'),
-      h('div', { class: 'banner' }, 'Um motorista profissional dirige o ', h('b', {}, 'seu carro'), '. Você vai de passageiro e volta no seu próprio veículo.'),
-      h('label', { class: 'field' }, h('span', {}, 'Embarque'), pickSel), gpsBtn,
-      h('label', { class: 'field' }, h('span', {}, 'Destino'), destInput), suggest, err, quoteBox, h('div', { class: 'cta-bar' }, cta))));
-  paintSuggest(); refresh();
+      h('div', { class: 'booking-heading' },
+        h('div', { class: 'eyebrow' }, 'SUA VIAGEM'),
+        h('h1', {}, 'Informe os endereços'),
+        h('p', { class: 'muted' }, 'Digite a rua, o número e o bairro para localizar os pontos no mapa.')),
+      h('div', { class: 'address-panel' },
+        h('label', { class: 'field address-field' },
+          h('span', {}, 'Embarque'),
+          h('span', { class: 'address-input-wrap' },
+            h('span', { class: 'address-dot pickup-dot', 'aria-hidden': 'true' }),
+            pickupInput)),
+        pickupResults,
+        gpsBtn,
+        h('div', { class: 'address-separator' }),
+        h('label', { class: 'field address-field' },
+          h('span', {}, 'Destino'),
+          h('span', { class: 'address-input-wrap' },
+            h('span', { class: 'address-dot destination-dot', 'aria-hidden': 'true' }),
+            destInput)),
+        destResults),
+      h('p', { class: 'muted small address-provider-note' }, 'Busca de endereços por Photon / OpenStreetMap. O número pode não estar mapeado com precisão.'),
+      err, quoteBox, h('div', { class: 'cta-bar' }, cta))));
+  paintQuote();
 }
 
 // ---------- solicitação ----------
