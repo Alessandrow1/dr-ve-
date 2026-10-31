@@ -310,6 +310,20 @@ test('admin: tarifa valida limites, só afeta novos pedidos e é auditada', asyn
   await call('POST', `/api/rides/${c.data.ride.id}/cancel`, { headers: { 'x-ride-token': c.data.token } });
 });
 
+test('motorista simulado percorre um progresso estável para a rota de bicicleta', async () => {
+  const a = await call('POST', '/api/rides', { body: rideBody({ demoAuto: true }) });
+  await call('POST', `/api/rides/${a.data.ride.id}/confirm`, { headers: { 'x-ride-token': a.data.token } });
+  const moving = await until(a.data.ride.id, a.data.token, 'motorista_a_caminho', 5000);
+  assert.equal(moving.simulatedDriver, true);
+  assert.ok(Number.isFinite(moving.driverPickupProgress), 'deve informar progresso pela rota de bicicleta');
+  assert.ok(moving.driverPickupProgress >= 0 && moving.driverPickupProgress <= 1);
+  assert.ok(moving.driverRouteStart && Number.isFinite(moving.driverRouteStart.lat) && Number.isFinite(moving.driverRouteStart.lng));
+  const next = await call('GET', `/api/rides/${a.data.ride.id}`, { headers: { 'x-ride-token': a.data.token } });
+  assert.deepEqual(next.data.driverRouteStart, moving.driverRouteStart, 'a origem da rota simulada não muda a cada atualização');
+  assert.ok(Number.isFinite(next.data.driverPickupProgress));
+  await until(a.data.ride.id, a.data.token, 'servico_concluido', 30000);
+});
+
 test('motorista simulado atende dois pedidos simultâneos, um de cada vez', async () => {
   const a = await call('POST', '/api/rides', { body: rideBody({ demoAuto: true }) });
   const b = await call('POST', '/api/rides', { body: rideBody({ demoAuto: true }) });
