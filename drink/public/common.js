@@ -160,15 +160,14 @@ export function mapView(cfg) {
 
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
   const tileUrls = {
-    dark: 'https://tiles.stadiamaps.com/tiles/stamen_toner_dark/{z}/{x}/{y}{r}.png',
-    light: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}{r}.png',
+    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+    light: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
   };
   const tiles = L.tileLayer(tileUrls[getTheme()], {
     maxZoom: 20,
     referrerPolicy: 'strict-origin-when-cross-origin',
     attribution:
       '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> · ' +
-      '&copy; <a href="https://stamen.com/" target="_blank" rel="noopener">Stamen Design</a> · ' +
       '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · ' +
       '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · ' +
       'Rotas: <a href="https://valhalla.openstreetmap.de/" target="_blank" rel="noopener">Valhalla</a> / ' +
