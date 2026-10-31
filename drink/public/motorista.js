@@ -171,7 +171,7 @@ const navLink = (p, waypoints = []) => {
 
 function paintActive(view, ride) {
   // O mapa é atualizado a cada consulta, sem redesenhar o checklist em preenchimento.
-  const key = `${ride.id}|${ride.state}|${ride.verification?.ok}`;
+  const key = `${ride.id}|${ride.state}|${ride.verification?.ok}|${ride.completedStops || 0}`;
   const headingToPickup = ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state);
   if (view.dataset.key === key) {
     if (view.pickupMap) {
