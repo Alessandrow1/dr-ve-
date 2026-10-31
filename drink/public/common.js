@@ -205,8 +205,8 @@ export function mapView(cfg) {
   map.attributionControl.setPrefix(false);
   map.attributionControl.addAttribution(
     '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> · ' +
-    '<a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · ' +
-    '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · ' +
+    '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · ' +
     'Rotas: <a href="https://valhalla.openstreetmap.de/" target="_blank" rel="noopener">Valhalla</a> / ' +
     '<a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">OSRM</a> · ' +
     '<a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener">corrigir mapa</a>',
