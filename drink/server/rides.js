@@ -62,6 +62,13 @@ function pickupCancellationPolicy(ride, at = now()) {
   const regularFee = cancelFee(ride.state, tariff());
   const driver = ride.driverId ? db.drivers[ride.driverId] : null;
   const progress = ride.pickupProgress;
+  const cancellableStates = [
+    'motorista_encontrado', 'motorista_a_caminho', 'motorista_chegou', 'verificacao_pre_servico',
+  ];
+
+  if (progress?.freeCancelReason && cancellableStates.includes(ride.state)) {
+    return { fee: 0, eligible: true, reason: progress.freeCancelReason };
+  }
 
   if (driver && !driver.isBot && progress) {
     const lateOnArrival = Boolean(progress.lateArrivalAt) &&
@@ -75,11 +82,16 @@ function pickupCancellationPolicy(ride, at = now()) {
       gpsIsFresh && Number.isFinite(progress.lastProgressAt) &&
       at - progress.lastProgressAt >= PICKUP_NO_PROGRESS_MS;
 
-    if (lateOnArrival || lateOnTheWay) {
-      return { fee: 0, eligible: true, reason: 'motorista_atrasado' };
-    }
-    if (stoppedWithoutProgress) {
-      return { fee: 0, eligible: true, reason: 'motorista_sem_progresso' };
+    const reason = lateOnArrival || lateOnTheWay
+      ? 'motorista_atrasado'
+      : stoppedWithoutProgress
+        ? 'motorista_sem_progresso'
+        : null;
+    if (reason) {
+      progress.freeCancelReason = reason;
+      progress.freeCancelAt = at;
+      persist();
+      return { fee: 0, eligible: true, reason };
     }
   }
 
