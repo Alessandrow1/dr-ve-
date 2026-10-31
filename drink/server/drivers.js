@@ -67,7 +67,7 @@ export function setDriverPhoto(id, photo) {
   } else {
     const value = String(photo);
     if (value.length > 180000) throw new HttpError(413, 'A foto ficou muito grande. Escolha outra imagem.');
-    if (!/^data:image\\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(value)) {
+    if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(value)) {
       throw new HttpError(422, 'Envie uma foto JPG válida.');
     }
     d.photoUrl = value;
