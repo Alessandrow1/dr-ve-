@@ -474,6 +474,7 @@ function serveStatic(req, res, pathname) {
     'Content-Type': MIME[ext] || 'application/octet-stream',
     'Cache-Control': 'no-cache',
     'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Content-Security-Policy':
       "default-src 'self'; img-src 'self' data: https://tiles.stadiamaps.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' https://unpkg.com; connect-src 'self'; frame-ancestors 'none'",
   });
