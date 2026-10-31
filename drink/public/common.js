@@ -163,9 +163,12 @@ export function mapView(cfg) {
     radius: 7, color: '#FFFFFF', weight: 3, fillColor: '#4D9FFF', fillOpacity: 1,
   });
   const route = L.polyline([], {
-    color: '#B8FF5C', weight: 5, opacity: 0.92, lineCap: 'round', dashArray: '8 8',
+    color: '#B8FF5C', weight: 5, opacity: 0.96, lineCap: 'round', lineJoin: 'round',
   });
   let lastRouteKey = '';
+  let routeRequestId = 0;
+  let routeController = null;
+  let routeTimer = null;
   let locating = false;
 
   function setMarker(marker, point) {
@@ -201,6 +204,56 @@ export function mapView(cfg) {
 
   requestAnimationFrame(() => requestAnimationFrame(() => map.invalidateSize({ pan: false })));
 
+  async function loadRoadRoute(pk, ds, key, requestId, controller) {
+    const params = new URLSearchParams({
+      pickupLat: String(Number(pk.lat)),
+      pickupLng: String(Number(pk.lng)),
+      destLat: String(Number(ds.lat)),
+      destLng: String(Number(ds.lng)),
+    });
+    try {
+      const response = await fetch(`/api/route?${params.toString()}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível calcular a rota pelas ruas.');
+      if (requestId !== routeRequestId || key !== lastRouteKey) return;
+
+      const coordinates = data.geometry?.coordinates;
+      if (!Array.isArray(coordinates) || coordinates.length < 2) {
+        throw new Error('O serviço de rotas não retornou um caminho válido.');
+      }
+
+      route.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
+      if (!map.hasLayer(route)) route.addTo(map);
+      pickup.bringToFront();
+      dest.bringToFront();
+      driver.bringToFront();
+      user.bringToFront();
+      map.fitBounds(route.getBounds().pad(0.2), { maxZoom: 16, animate: true });
+
+      const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
+      const duration = Math.max(1, Number(data.durationMin) || 1);
+      note.textContent = `ROTA · ${distance} km · ${duration} min`;
+      note.classList.remove('map-note-error');
+    } catch (error) {
+      if (error.name === 'AbortError' || requestId !== routeRequestId) return;
+      console.warn('[map] falha ao calcular rota viária:', error);
+      note.textContent = error.message.length > 64 ? 'ROTA INDISPONÍVEL · tente novamente' : error.message;
+      note.classList.add('map-note-error');
+    }
+  }
+
+  function cancelRoute() {
+    routeRequestId += 1;
+    clearTimeout(routeTimer);
+    routeController?.abort();
+    routeController = null;
+    if (map.hasLayer(route)) map.removeLayer(route);
+    lastRouteKey = '';
+  }
+
   return {
     el,
     update({ pickup: pk, dest: ds, driver: dr }) {
@@ -210,18 +263,27 @@ export function mapView(cfg) {
 
       if (pk && ds) {
         const points = [[Number(pk.lat), Number(pk.lng)], [Number(ds.lat), Number(ds.lng)]];
-        route.setLatLngs(points);
-        if (!map.hasLayer(route)) route.addTo(map);
         const key = points.map((p) => p.map((v) => v.toFixed(5)).join(',')).join('|');
         if (key !== lastRouteKey) {
-          map.fitBounds(route.getBounds().pad(0.2), { maxZoom: 16, animate: true });
           lastRouteKey = key;
+          routeRequestId += 1;
+          const requestId = routeRequestId;
+          clearTimeout(routeTimer);
+          routeController?.abort();
+          routeController = new AbortController();
+          if (map.hasLayer(route)) map.removeLayer(route);
+          note.textContent = 'CALCULANDO ROTA PELAS RUAS...';
+          note.classList.remove('map-note-error');
+          routeTimer = setTimeout(() => {
+            loadRoadRoute(pk, ds, key, requestId, routeController);
+          }, 450);
         }
       } else {
-        if (map.hasLayer(route)) map.removeLayer(route);
-        lastRouteKey = '';
+        cancelRoute();
         const single = pk || ds;
         if (single) map.setView([single.lat, single.lng], 16, { animate: true });
+        note.textContent = 'MOSSORÓ · RN';
+        note.classList.remove('map-note-error');
       }
     },
   };
