@@ -218,7 +218,7 @@ function paintActive(view, ride) {
     view.pickupMap = null;
   }
   const target = ['servico_iniciado', 'em_andamento'].includes(ride.state) ? ride.destination : null;
-  if (target) out.push(h('a', { class: 'btn ghost', href: navLink({ ...target, mode: 'driving' }, ride.stops || []), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação no app de mapas'));
+  if (target) out.push(h('a', { class: 'btn ghost', href: navLink({ ...target, mode: 'driving' }, (ride.stops || []).slice(ride.completedStops || 0)), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação no app de mapas'));
 
   if (ride.state === 'verificacao_pre_servico') out.push(verificationForm(ride));
   else if (steps[ride.state]) {
