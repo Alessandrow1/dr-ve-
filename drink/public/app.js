@@ -156,6 +156,7 @@ function showHome() {
   const timers = { pickup: null, dest: null };
   const controllers = { pickup: null, dest: null };
   let lastSearchAt = 0;
+  let quoteRequestId = 0;
 
   function renderEmpty(container, message) {
     container.replaceChildren(h('p', { class: 'muted small address-message' }, message));
@@ -174,10 +175,11 @@ function showHome() {
     const district = props.district || props.suburb || props.locality || props.city_district || '';
     const city = props.city || props.county || 'Mossoró';
     const state = props.state || 'RN';
-    const parts = [main, district, city, state].filter(Boolean);
-    const label = parts.filter((value, index) => parts.indexOf(value) === index).join(', ');
     const typedNumber = typedQuery.match(/(?:^|\s|,)(\d+[A-Za-z]?)\b/);
     const numberConfirmed = !typedNumber || (number && number.toLowerCase() === typedNumber[1].toLowerCase());
+    const displayMain = numberConfirmed ? main : typedQuery;
+    const parts = [displayMain, district, city, state].filter(Boolean);
+    const label = parts.filter((value, index) => parts.indexOf(value) === index).join(', ');
     const subtitle = [district, city, state].filter(Boolean).join(' · ');
     return {
       point: { lat, lng, label },
@@ -256,6 +258,7 @@ function showHome() {
   function scheduleSearch(kind, input, container) {
     clearTimeout(timers[kind]);
     controllers[kind]?.abort();
+    quoteRequestId += 1;
     if (kind === 'pickup') S.pickup = null;
     else S.dest = null;
     S.quote = null;
@@ -317,6 +320,7 @@ function showHome() {
   }
 
   async function refresh() {
+    const requestId = ++quoteRequestId;
     err.textContent = '';
     map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest) });
     if (!S.pickup || !S.dest) {
@@ -326,10 +330,13 @@ function showHome() {
     }
     cta.disabled = true;
     try {
-      S.quote = await api('POST', '/api/quote', {
+      const quote = await api('POST', '/api/quote', {
         body: { pickup: S.pickup, destination: S.dest },
       });
+      if (requestId !== quoteRequestId) return;
+      S.quote = quote;
     } catch (e) {
+      if (requestId !== quoteRequestId) return;
       S.quote = null;
       err.textContent = e.message;
     }
