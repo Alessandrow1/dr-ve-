@@ -564,7 +564,7 @@ async function showTracking() {
     if (isTerminal(ride)) { stopLive(); return ride.state === 'servico_concluido' ? showFinished() : showCancelled(); }
     const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.verificationOk, ride.cancelPolicy?.reason]);
     map.update({
-      pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition,
+      pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition, state: ride.state,
       driverProgress: ride.driverProgress, driverPickupProgress: ride.driverPickupProgress,
       driverRouteStart: ride.driverRouteStart,
     });
