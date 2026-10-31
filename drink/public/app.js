@@ -148,14 +148,21 @@ function showProfile() {
   const name = h('input', { value: me.name, autocomplete: 'name', maxlength: '60' });
   const phone = h('input', { value: me.phone, type: 'tel', autocomplete: 'tel', inputmode: 'tel', maxlength: '20' });
   let photo = me.photo || '';
-  const preview = h('div', { style: 'display:flex;justify-content:center;padding:4px 0 8px' });
+  const preview = h('button', {
+    type: 'button',
+    class: 'profile-photo-trigger',
+    style: 'display:flex;align-items:center;justify-content:center;margin:0 auto 8px;padding:0;border:0;background:transparent;border-radius:50%;cursor:pointer',
+    'aria-label': 'Toque para alterar a foto do perfil',
+    title: 'Alterar foto do perfil',
+    onclick: () => file.click(),
+  });
   const renderPhoto = () => {
-    const initials = String(name.value || me.name || 'Cliente').trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+    const initials = String(name.value || me.name || 'Cliente').trim().split(/\\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
     preview.replaceChildren(photo
-      ? h('img', { src: photo, alt: 'Foto do perfil', style: 'width:92px;height:92px;object-fit:cover;border-radius:50%;border:2px solid var(--lime)' })
+      ? h('img', { src: photo, alt: 'Sua foto de perfil. Toque para alterar.', style: 'display:block;width:92px;height:92px;object-fit:cover;border-radius:50%;border:2px solid var(--lime)' })
       : h('div', { class: 'avatar', style: 'width:92px;height:92px;font-size:28px' }, initials || 'CL'));
   };
-  const file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', 'aria-label': 'Escolher foto do perfil', onchange: async () => {
+  const file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none', 'aria-label': 'Escolher foto do perfil', onchange: async () => {
     const selected = file.files?.[0];
     if (!selected) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) {
@@ -179,16 +186,23 @@ function showProfile() {
       bitmap.close?.();
       photo = canvas.toDataURL('image/jpeg', 0.82);
       renderPhoto();
+      removePhoto.hidden = false;
     } catch {
       toast(root, 'Não foi possível abrir essa imagem. Tente outra foto.');
       file.value = '';
     }
   } });
+  const removePhoto = h('button', {
+    class: 'btn ghost',
+    hidden: !photo,
+    onclick: () => { photo = ''; file.value = ''; renderPhoto(); removePhoto.hidden = true; },
+  }, 'Remover foto');
   renderPhoto();
   const close = modal(root, 'Perfil', h('div', { class: 'stack' },
     preview,
-    h('label', { class: 'field' }, h('span', {}, 'Foto do perfil'), file),
-    photo ? h('button', { class: 'btn ghost', onclick: () => { photo = ''; file.value = ''; renderPhoto(); } }, 'Remover foto') : null,
+    h('p', { class: 'muted small', style: 'text-align:center;margin-top:-4px' }, 'Toque na foto para alterar'),
+    file,
+    removePhoto,
     h('label', { class: 'field' }, h('span', {}, 'Nome'), name),
     h('label', { class: 'field' }, h('span', {}, 'Telefone (opcional)'), phone),
     h('p', { class: 'muted small' }, 'A foto e os dados ficam salvos somente neste aparelho, neste protótipo. Ainda não são enviados para um servidor.'),
