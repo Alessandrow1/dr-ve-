@@ -20,7 +20,7 @@ const authH = () => ({ 'x-ride-token': S.token });
 const placeName = (p) => (p?.placeId ? cfg.places.find((x) => x.id === p.placeId)?.name : p?.label) || '';
 const placePoint = (p) => (p?.placeId ? cfg.places.find((x) => x.id === p.placeId) : p);
 
-const MENU_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+const MENU_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
 const KEY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v4M21 12v3"/></svg>';
 const svgNode = (markup) => { const d = document.createElement('div'); d.innerHTML = markup; return d.firstChild; };
 
