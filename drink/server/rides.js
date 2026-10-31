@@ -669,6 +669,7 @@ export function departRide(id, driverId) {
   const ride = getRide(id);
   authDriverFor(ride, driverId);
   requireState(ride, ['motorista_encontrado']);
+  const d = requireDriver(driverId);
   if (!ride.pickupProgress) {
     const startedAt = now();
     const distanceKm = roadKm(d.pos, ride.pickup);
