@@ -120,16 +120,17 @@ function positionInfo(ride) {
     case 'em_andamento': {
       if (fresh) {
         const km = roadKm(d.pos, ride.destination);
-        return { pos: d.pos, etaMin: Math.max(1, Math.ceil((km / tariff().avgCarKmh) * 60)) };
+        return { pos: d.pos, etaMin: Math.max(1, Math.ceil((km / tariff().avgCarKmh) * 60)), progress: null };
       }
-      const t = elapsed / T;
+      const t = Math.max(0, Math.min(1, elapsed / T));
       return {
         pos: lerp(ride.pickup, ride.destination, t),
-        etaMin: Math.max(1, Math.ceil(q.durationMin * (1 - Math.min(1, t)))),
+        etaMin: Math.max(1, Math.ceil(q.durationMin * (1 - t))),
+        progress: t,
       };
     }
     case 'servico_concluido':
-      return { pos: { lat: ride.destination.lat, lng: ride.destination.lng }, etaMin: 0 };
+      return { pos: { lat: ride.destination.lat, lng: ride.destination.lng }, etaMin: 0, progress: 1 };
     default:
       return { pos: null, etaMin: null };
   }
@@ -140,7 +141,7 @@ const pt = (p) => ({ label: p.label, lat: p.lat, lng: p.lng });
 
 export function view(ride, role) {
   const d = ride.driverId ? db.drivers[ride.driverId] : null;
-  const { pos, etaMin } = positionInfo(ride);
+  const { pos, etaMin, progress } = positionInfo(ride);
   const base = {
     id: ride.id,
     code: ride.code,
@@ -153,6 +154,7 @@ export function view(ride, role) {
     quote: ride.quote,
     timeline: ride.timeline,
     driverPosition: pos,
+    driverProgress: Number.isFinite(progress) ? progress : null,
     etaMin,
     cancel: ride.cancel || null,
     demo: true,
@@ -167,6 +169,7 @@ export function view(ride, role) {
       pickup: base.pickup,
       destination: base.destination,
       driverPosition: base.driverPosition,
+      driverProgress: base.driverProgress,
       etaMin: base.etaMin,
       driverFirstName: d ? d.name.split(' ')[0] : null,
       customerFirstName: ride.customer.name.split(' ')[0],
