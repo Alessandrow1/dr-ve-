@@ -87,15 +87,45 @@ function showShell() {
   const initials = String(me.name || 'Motorista').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
   const checks = me.compliance || {};
   const checkLabel = (value) => value === 'demo' ? 'demo' : value === 'pendente_verificacao' ? 'pendente' : String(value || 'não informado');
+  const photoInput = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none', 'aria-label': 'Escolher foto do perfil', onchange: async () => {
+    const selected = photoInput.files?.[0];
+    if (!selected) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type) || selected.size > 8 * 1024 * 1024) {
+      toast(root, 'Escolha uma foto JPG, PNG ou WebP de até 8 MB.');
+      photoInput.value = '';
+      return;
+    }
+    try {
+      const bitmap = await createImageBitmap(selected);
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close?.();
+      me = await api('POST', '/api/driver/photo', { headers: H(), body: { photo: canvas.toDataURL('image/jpeg', 0.8) } });
+      showShell();
+      toast(root, 'Foto do perfil atualizada.');
+    } catch (error) { toast(root, error.message || 'Não foi possível salvar a foto.'); }
+    finally { photoInput.value = ''; }
+  } });
+  const photo = h('button', { type: 'button', class: 'profile-photo-trigger', style: 'flex:0 0 auto;align-self:flex-start', 'aria-label': 'Toque para alterar sua foto', onclick: () => photoInput.click() },
+    me.photoUrl
+      ? h('img', { src: me.photoUrl, alt: 'Sua foto de perfil', style: 'display:block;width:64px;height:64px;object-fit:cover;border-radius:50%;border:2px solid var(--lime)' })
+      : h('div', { class: 'avatar driver-profile-avatar', 'aria-hidden': 'true' }, initials));
+  const removePhoto = me.photoUrl ? h('button', { class: 'btn ghost small', type: 'button', onclick: async () => {
+    try { me = await api('POST', '/api/driver/photo', { headers: H(), body: { photo: null } }); showShell(); toast(root, 'Foto removida.'); }
+    catch (error) { toast(root, error.message); }
+  } }, 'Remover foto') : null;
   const profile = h('section', { class: 'driver-profile-card driver-own-profile' },
-    h('div', { class: 'avatar driver-profile-avatar', 'aria-hidden': 'true' }, initials),
+    photo,
     h('div', { class: 'driver-profile-copy' },
       h('div', { class: 'row between' }, h('b', {}, me.name), h('span', { class: me.status === 'aprovado' ? 'pill lime' : 'pill' },
         ({ aprovado: 'Aprovado', em_analise: 'Em análise', reprovado: 'Reprovado', suspenso: 'Suspenso' }[me.status] || me.status))),
       h('p', { class: 'muted' }, `${me.publicId} · ${me.transport}`),
       h('p', { class: 'muted small' }, `★ ${Number(me.rating || 0).toFixed(1).replace('.', ',')} · ${me.ridesDone || 0} corridas concluídas`),
       h('p', { class: 'driver-profile-note' }, `CNH: ${checkLabel(checks.cnh)} · antecedentes: ${checkLabel(checks.antecedentes)} · seguro: ${checkLabel(checks.seguro)}. Verificações reais ainda não estão conectadas.`)));
-  root.replaceChildren(demoBar(), header(sw), profile, tabs, body);
+  root.replaceChildren(demoBar(), header(sw), h('div', { style: 'display:none' }, photoInput), profile, removePhoto, tabs, body);
   if (tab === 'ganhos') return showEarnings(body);
   showPanel(body);
 }
