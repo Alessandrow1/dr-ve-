@@ -459,6 +459,10 @@ function showHome() {
     stopFields.push(entry);
     S.stops = getStops();
     renderStopFields();
+    if (!initialPoint) {
+      quoteRequestId += 1;
+      S.quote = null;
+    }
     paintQuote();
     map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest), stops: S.stops });
   }
@@ -468,6 +472,9 @@ function showHome() {
     addStopBtn.disabled = stopFields.length >= 2;
     addStopBtn.textContent = stopFields.length >= 2 ? 'Máximo de 2 paradas' : '+ Adicionar parada';
   }
+
+  // Recria os campos já selecionados ao voltar da tela de confirmação.
+  [...(S.stops || [])].forEach((point) => addStop(point));
 
   function useGps() {
     clearTimeout(timers.pickup);
@@ -688,7 +695,8 @@ async function showTracking() {
         svgNode(KEY_ICON), h('div', { class: 'digits' }, ride.pin.split('').map((c) => h('b', {}, c))),
         h('p', {}, 'Seu código de segurança. Só diga ao motorista quando ele chegar e se identificar.')) : null,
       h('div', { class: 'card' }, h('p', {}, h('b', {}, 'Seu carro: '), `${ride.vehicle.model} ${ride.vehicle.color}, ${ride.vehicle.plate}`),
-        h('p', { class: 'muted' }, `${ride.pickup.label} para ${ride.destination.label} · ${brl(ride.quote.total)} (demonstração)`)),
+        h('p', { class: 'muted' }, `${ride.pickup.label} para ${ride.destination.label} · ${brl(ride.quote.total)} (demonstração)`),
+        ride.stops?.length ? h('p', { class: 'muted' }, `Paradas: ${ride.stops.map((point) => point.label).join(' · ')}`) : null),
       ride.shareUrl ? h('button', { class: 'btn ghost', onclick: () => shareTrip(ride) }, 'Copiar link para quem acompanha') : null,
       h('details', {}, h('summary', {}, 'Ver todas as etapas'), h('ol', { class: 'steps' }, FLOW.map((s, i) => h('li', { class: i < idx ? 'done' : i === idx ? 'now' : '' }, cfg.states[s])))),
       ride.state === 'aguardando_confirmacao' ? h('button', { class: 'btn', onclick: async (e) => { busy(e.currentTarget, true); try { paint(await api('POST', `/api/rides/${ride.id}/confirm`, { headers: authH() })); } catch (er) { toast(root, er.message); busy(e.currentTarget, false); } } }, 'Confirmar e procurar motorista') : null,
