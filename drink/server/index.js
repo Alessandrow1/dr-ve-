@@ -41,6 +41,7 @@ const json = (res, status, body) => {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
   });
   res.end(s);
 };
