@@ -315,6 +315,7 @@ test('motorista simulado percorre um progresso estável para a rota de bicicleta
   await call('POST', `/api/rides/${a.data.ride.id}/confirm`, { headers: { 'x-ride-token': a.data.token } });
   const moving = await until(a.data.ride.id, a.data.token, 'motorista_a_caminho', 5000);
   assert.equal(moving.simulatedDriver, true);
+  assert.equal(moving.driverPosition, null, 'a simulação não deve enviar uma posição em linha reta');
   assert.ok(Number.isFinite(moving.driverPickupProgress), 'deve informar progresso pela rota de bicicleta');
   assert.ok(moving.driverPickupProgress >= 0 && moving.driverPickupProgress <= 1);
   assert.ok(moving.driverRouteStart && Number.isFinite(moving.driverRouteStart.lat) && Number.isFinite(moving.driverRouteStart.lng));
