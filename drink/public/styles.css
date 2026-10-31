@@ -60,6 +60,8 @@ a { color: var(--lime); }
 .map-recenter:disabled { opacity: .55; cursor: wait; }
 .map-recenter span { font-size: 29px; line-height: 1; font-weight: 500; transform: translateY(-1px); }
 .sheet { background: var(--graphite); border-radius: 28px 28px 0 0; margin-top: -18px; padding: 20px 18px 22px; position: relative; max-height: 66dvh; overflow-y: auto; box-shadow: 0 -12px 30px rgba(0,0,0,.45); }
+/* Mantém o painel abaixo do mapa, sem sobrepor o título SUA VIAGEM. */
+.screen > .sheet:not(.full) { margin-top: 10px; }
 .sheet.full { flex: 1; max-height: none; margin-top: 0; border-radius: 0; }
 .sheet h1 { font-size: 24px; letter-spacing: -0.03em; line-height: 1.15; }
 .sheet h2 { font-size: 19px; letter-spacing: -0.02em; }
