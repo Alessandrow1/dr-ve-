@@ -120,11 +120,7 @@ export function mapView(cfg) {
     title: 'Centralizar na minha localização',
     'aria-label': 'Centralizar na minha localização',
     onclick: locate,
-  },
-    h('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' },
-      h('circle', { cx: '12', cy: '12', r: '7' }),
-      h('circle', { cx: '12', cy: '12', r: '2' }),
-      h('path', { d: 'M12 2v3M12 19v3M2 12h3M19 12h3' })));
+  }, h('span', { 'aria-hidden': 'true' }, '⌖'));
   const el = h('div', { class: 'mapwrap' }, mapEl, note, recenter);
 
   if (!globalThis.L) {
