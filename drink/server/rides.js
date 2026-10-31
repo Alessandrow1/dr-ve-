@@ -292,6 +292,7 @@ export function view(ride, role) {
     pickup: pt(ride.pickup),
     destination: pt(ride.destination),
     stops: (ride.stops || []).map(pt),
+    completedStops: ride.completedStops || 0,
     quote: ride.quote,
     timeline: ride.timeline,
     driverPosition: pos,
@@ -313,6 +314,7 @@ export function view(ride, role) {
       pickup: base.pickup,
       destination: base.destination,
       stops: base.stops,
+      completedStops: base.completedStops,
       driverPosition: base.driverPosition,
       driverProgress: base.driverProgress,
       driverPickupProgress: base.driverPickupProgress,
@@ -450,6 +452,7 @@ export function createRide(body) {
     pickup,
     destination: dest,
     stops,
+    completedStops: 0,
     vehicle: { model: model.slice(0, 40), color: color.slice(0, 20), plate },
     authorizationConfirmed: true,
     paymentMethod: method,
@@ -870,10 +873,36 @@ export function driveRide(id, driverId) {
   return ride;
 }
 
+export function completeNextStop(id, driverId) {
+  const ride = getRide(id);
+  authDriverFor(ride, driverId);
+  requireState(ride, ['em_andamento'], 'As paradas só podem ser concluídas durante o trajeto.');
+  const stops = ride.stops || [];
+  const completed = ride.completedStops || 0;
+  if (completed >= stops.length) throw new HttpError(409, 'Todas as paradas já foram concluídas.');
+  const stop = stops[completed];
+  ride.completedStops = completed + 1;
+  ride.timeline.push({
+    state: ride.state,
+    label: `Parada ${completed + 1} concluída`,
+    at: now(),
+    by: 'motorista',
+    action: 'concluir_parada',
+    stop: stop.label,
+  });
+  ride.updatedAt = now();
+  persist();
+  notify(ride);
+  return ride;
+}
+
 export async function finishRide(id, driverId) {
   const ride = getRide(id);
   authDriverFor(ride, driverId);
   requireState(ride, ['em_andamento']);
+  if ((ride.completedStops || 0) < (ride.stops || []).length) {
+    throw new HttpError(409, 'Conclua todas as paradas antes de finalizar a viagem.');
+  }
   const prov = getProvider();
   const cap = await prov.capture({ ref: ride.payment.ref, amount: ride.quote.total });
   requireState(ride, ['em_andamento']);
