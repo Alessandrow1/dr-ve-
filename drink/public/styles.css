@@ -121,10 +121,14 @@ a { color: var(--lime); }
 .booking-heading .eyebrow { color: var(--lime); font-size: 14px; font-weight: 800; letter-spacing: .12em; margin-bottom: 8px; }
 .booking-heading h1 { margin-bottom: 5px; }
 .booking-heading .muted { font-size: 13px; }
-.stop-field { padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(128, 128, 128, .06); }
-.stop-field > .row { margin-bottom: 2px; }
+.stop-field { padding: 17px; border: 1px solid var(--line); border-radius: 16px; background: rgba(128, 128, 128, .06); }
+.stop-field > .row { margin-bottom: 7px; }
+.stop-field > .field { margin-top: 5px !important; }
+.stop-field .address-results { margin-top: 10px; margin-bottom: 3px; }
 :root[data-theme="light"] .stop-field { background: #f7f9f7; }
-.address-panel { background: #171a18; border: 1px solid #343d36; border-radius: 20px; padding: 13px; }
+.address-panel { background: #171a18; border: 1px solid #343d36; border-radius: 20px; padding: 16px; }
+.address-panel > .row.between { margin-top: 19px !important; margin-bottom: 5px; }
+.address-panel > .address-separator { margin: 21px 0; }
 .address-field > span:first-child { font-size: 12px; font-weight: 700; color: #d7e2d8; }
 .address-input-wrap { position: relative; display: block; }
 .address-input-wrap input { padding-left: 42px; background: #0e110f; border-color: #3a443c; }
