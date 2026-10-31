@@ -43,6 +43,23 @@ export const store = {
   del(k) { try { localStorage.removeItem('drink.' + k); } catch { /* sem armazenamento */ } },
 };
 
+export function getTheme() {
+  return store.get('theme', 'dark') === 'light' ? 'light' : 'dark';
+}
+
+export function setTheme(theme) {
+  const selected = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = selected;
+  store.set('theme', selected);
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.setAttribute('content', selected === 'light' ? '#ffffff' : '#101010');
+  window.dispatchEvent(new CustomEvent('drink:theme-change', { detail: { theme: selected } }));
+  return selected;
+}
+
+// Aplica a preferência salva antes de montar as telas.
+document.documentElement.dataset.theme = getTheme();
+
 export async function api(method, url, { body, headers } = {}) {
   let res;
   try {
@@ -136,13 +153,22 @@ export function mapView(cfg) {
   }).setView([center.lat, center.lng], 14);
 
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
-  const tiles = L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+  const tileUrls = {
+    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+    light: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+  };
+  const tiles = L.tileLayer(tileUrls[getTheme()], {
     maxZoom: 20,
     attribution:
       '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> ' +
       '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> ' +
       '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
   }).addTo(map);
+
+  window.addEventListener('drink:theme-change', (event) => {
+    const theme = event.detail?.theme === 'light' ? 'light' : 'dark';
+    tiles.setUrl(tileUrls[theme]);
+  });
 
   tiles.on('tileerror', () => {
     note.textContent = 'MAPA INDISPONÍVEL · confira a conexão';
