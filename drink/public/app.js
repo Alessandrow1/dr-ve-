@@ -51,7 +51,7 @@ function openMenu() {
   const back = h('div', { class: 'drawer-back', onclick: (e) => e.target === back && close() },
     h('nav', { class: 'drawer', 'aria-label': 'Menu' },
       h('div', { class: 'logo', style: 'margin-bottom:14px' }, h('span', {}, 'Dr', h('span', { class: 'bang' }, '!'), 'nk')),
-      item('Início', () => (S.ride && !isTerminal(S.ride) ? showTracking() : showHome())),
+      item('Início', () => (S.ride && !isTerminal(S.ride) ? showTracking() : startNewRide())),
       item('Histórico de corridas', showHistory),
       item('Pagamentos', showPayments),
       item('Perfil', showProfile),
@@ -134,7 +134,7 @@ async function showHistory() {
   stopLive();
   const list = h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Carregando…'));
   frame(topbar(), h('section', { class: 'sheet full stack' },
-    h('div', { class: 'row between' }, h('h1', {}, 'Suas corridas'), h('button', { class: 'btn ghost small', onclick: () => (S.ride && !isTerminal(S.ride) ? showTracking() : showHome()) }, 'Voltar')), list));
+    h('div', { class: 'row between' }, h('h1', {}, 'Suas corridas'), h('button', { class: 'btn ghost small', onclick: () => (S.ride && !isTerminal(S.ride) ? showTracking() : startNewRide()) }, 'Voltar')), list));
   try {
     const { rides } = await api('GET', '/api/rides', { headers: { 'x-customer-id': me.id } });
     list.replaceChildren(...(rides.length ? rides.map((r) => h('button', { class: 'list-item', onclick: () => openReceipt(r.id, r.token) },
@@ -158,6 +158,17 @@ async function openReceipt(id, token) {
       h('p', { class: 'muted small' }, `Pagamento: ${cfg.paymentMethods.find((m) => m.id === r.paymentMethod)?.label} (simulado) · Tabela de preços ${r.tariffVersion} · Comissão da plataforma ${r.commissionPct}%`),
       h('button', { class: 'btn ghost no-print', onclick: () => window.print() }, 'Imprimir ou salvar em PDF'));
   } catch (e) { box.replaceChildren(h('div', { class: 'error', role: 'alert' }, e.message)); }
+}
+
+// Inicia uma nova solicitação sem reaproveitar endereços ou preço da viagem anterior.
+function startNewRide() {
+  S.pickup = null;
+  S.dest = null;
+  S.quote = null;
+  S.ride = null;
+  S.token = null;
+  store.del('ride');
+  showHome();
 }
 
 // ---------- tela inicial ----------
@@ -644,7 +655,7 @@ async function showTracking() {
   }
   const refresh = async () => {
     try { paint(await api('GET', `/api/rides/${S.ride.id}`, { headers: authH() })); offline.hidden = true; }
-    catch (e) { if (e.offline) offline.hidden = false; else if (e.status === 404 || e.status === 403) { store.del('ride'); showHome(); } }
+    catch (e) { if (e.offline) offline.hidden = false; else if (e.status === 404 || e.status === 403) startNewRide(); }
   };
   paint(S.ride);
   S.poll = setInterval(refresh, 2500);
@@ -677,7 +688,7 @@ function showFinished() {
       : h('div', { class: 'stack' }, h('h2', {}, `Como foi com ${ride.driver?.name.split(' ')[0] || 'o motorista'}?`), h('div', { class: 'stars' }, starBtns), comment, err, send),
     h('button', { class: 'btn ghost', onclick: () => openReceipt(ride.id, S.token) }, 'Ver recibo'),
     h('button', { class: 'btn ghost', onclick: showSupport }, 'Falar com o suporte'),
-    h('button', { class: 'btn', onclick: showHome }, 'Voltar ao início')));
+    h('button', { class: 'btn', onclick: startNewRide }, 'Voltar ao início')));
 }
 
 function showCancelled() {
