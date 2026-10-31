@@ -92,7 +92,7 @@ a { color: var(--lime); }
 .field textarea { min-height: 90px; resize: vertical; }
 .field input::placeholder { color: #6d6d6d; }
 
-.booking-heading .eyebrow { color: var(--lime); font-size: 10px; font-weight: 800; letter-spacing: .16em; margin-bottom: 7px; }
+.booking-heading .eyebrow { color: var(--lime); font-size: 14px; font-weight: 800; letter-spacing: .12em; margin-bottom: 8px; }
 .booking-heading h1 { margin-bottom: 5px; }
 .booking-heading .muted { font-size: 13px; }
 .address-panel { background: #171a18; border: 1px solid #343d36; border-radius: 20px; padding: 13px; }
