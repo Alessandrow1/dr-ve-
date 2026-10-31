@@ -372,6 +372,10 @@ route('GET', '/api/drivers', async () => ({
   drivers: Object.values(S.db.drivers).filter((d) => !d.isBot).map(D.publicDriver),
 }));
 route('POST', '/api/driver/apply', async (req) => D.publicDriver(D.applyDriver(await readBody(req))));
+route('POST', '/api/driver/photo', async (req) => {
+  const body = await readBody(req);
+  return D.setDriverPhoto(header(req, 'x-driver-id'), body.photo ?? null);
+});
 route('GET', '/api/driver/me', async (req) => {
   const d = S.db.drivers[header(req, 'x-driver-id')];
   if (!d || d.isBot) throw new R.HttpError(401, 'Motorista não identificado.');
