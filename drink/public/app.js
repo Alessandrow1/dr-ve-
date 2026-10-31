@@ -760,7 +760,7 @@ async function showTracking() {
     if (!ride) return;
     S.ride = ride;
     if (isTerminal(ride)) { stopLive(); return ride.state === 'servico_concluido' ? showFinished() : showCancelled(); }
-    const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.verificationOk, ride.completedStops, ride.cancelPolicy?.reason]);
+    const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.driver?.photoUrl, ride.verificationOk, ride.completedStops, ride.cancelPolicy?.reason]);
     map.update({
       pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition, state: ride.state,
       driverProgress: ride.driverProgress, driverPickupProgress: ride.driverPickupProgress,
@@ -779,7 +779,9 @@ async function showTracking() {
         ? h('div', { class: 'banner' }, 'A localização do motorista parou de atualizar. O mapa mantém a última posição recebida até o GPS voltar.')
         : null,
       d ? h('div', { class: 'card driver-profile-card' },
-        h('div', { class: 'avatar driver-profile-avatar', 'aria-hidden': 'true' }, d.name.split(' ').map((x) => x[0]).slice(0, 2).join('')),
+        d.photoUrl
+          ? h('img', { class: 'driver-profile-avatar', src: d.photoUrl, alt: `Foto de perfil de ${d.name}`, style: 'width:64px;height:64px;object-fit:cover;border-radius:50%;border:2px solid var(--lime);flex:0 0 auto' })
+          : h('div', { class: 'avatar driver-profile-avatar', 'aria-hidden': 'true' }, d.name.split(' ').map((x) => x[0]).slice(0, 2).join('')),
         h('div', { class: 'driver-profile-copy' },
           h('div', { class: 'row between' }, h('b', {}, d.name), h('span', { class: 'pill lime' }, `★ ${d.rating.toFixed(1).replace('.', ',')}`)),
           h('p', { class: 'muted' }, `${d.transport} · ID ${d.publicId}`),
