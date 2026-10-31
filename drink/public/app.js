@@ -1,5 +1,5 @@
 // Aplicativo do cliente. O estado da corrida vem SEMPRE do backend: nada é exibido como confirmado sem resposta dele.
-import { $, h, api, brl, dateBR, km, uid, store, toast, modal, pendingList, stream, mapView, haversineKm, norm, fill } from './common.js';
+import { $, h, api, brl, dateBR, km, uid, store, toast, modal, pendingList, stream, mapView, haversineKm, norm, fill, getTheme, setTheme } from './common.js';
 
 const root = $('#app');
 let cfg;
@@ -55,10 +55,38 @@ function openMenu() {
       item('Histórico de corridas', showHistory),
       item('Pagamentos', showPayments),
       item('Perfil', showProfile),
+      item('⚙ Configurações', showSettings),
       item('Suporte e segurança', showSupport),
-      h('a', { class: 'item', href: '/motorista.html', style: 'display:flex;align-items:center;min-height:54px;padding:0 14px;font-size:17px;font-weight:600;color:#fff;text-decoration:none' }, 'Sou motorista parceiro')));
+      h('a', { class: 'item', href: '/motorista.html', style: 'display:flex;align-items:center;min-height:54px;padding:0 14px;font-size:17px;font-weight:600;color:var(--white);text-decoration:none' }, 'Sou motorista parceiro')));
   root.append(back);
   back.querySelector('button').focus();
+}
+
+
+function showSettings() {
+  let theme = getTheme();
+  const status = h('span', { class: 'setting-current' }, theme === 'light' ? 'Tema claro ativado' : 'Tema escuro ativado');
+  const toggle = h('button', {
+    class: 'theme-toggle',
+    type: 'button',
+    role: 'switch',
+    'aria-checked': theme === 'light' ? 'true' : 'false',
+    'aria-label': 'Alternar entre tema claro e escuro',
+    onclick: () => {
+      theme = setTheme(theme === 'light' ? 'dark' : 'light');
+      toggle.setAttribute('aria-checked', theme === 'light' ? 'true' : 'false');
+      toggle.setAttribute('aria-label', theme === 'light' ? 'Ativar tema escuro' : 'Ativar tema claro');
+      status.textContent = theme === 'light' ? 'Tema claro ativado' : 'Tema escuro ativado';
+    },
+  }, h('i', { 'aria-hidden': 'true' }));
+
+  modal(root, 'Configurações', h('div', { class: 'settings-list' },
+    h('div', { class: 'setting-row' },
+      h('div', { class: 'setting-copy' },
+        h('b', {}, 'Aparência'),
+        h('p', { class: 'muted small' }, 'Alterne entre o tema claro e escuro. O mapa acompanha a sua escolha.'),
+        status),
+      toggle)));
 }
 
 function showSupport() {
