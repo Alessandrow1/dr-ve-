@@ -229,8 +229,8 @@ export function mapView(cfg) {
       if (!map.hasLayer(route)) route.addTo(map);
       pickup.bringToFront();
       dest.bringToFront();
-      driver.bringToFront();
-      user.bringToFront();
+      if (map.hasLayer(driver)) driver.bringToFront();
+      if (map.hasLayer(user)) user.bringToFront();
       map.fitBounds(route.getBounds().pad(0.2), { maxZoom: 16, animate: true });
 
       const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
@@ -270,12 +270,14 @@ export function mapView(cfg) {
           const requestId = routeRequestId;
           clearTimeout(routeTimer);
           routeController?.abort();
-          routeController = new AbortController();
+          const controller = new AbortController();
+          routeController = controller;
           if (map.hasLayer(route)) map.removeLayer(route);
           note.textContent = 'CALCULANDO ROTA PELAS RUAS...';
           note.classList.remove('map-note-error');
+          map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 16, animate: true });
           routeTimer = setTimeout(() => {
-            loadRoadRoute(pk, ds, key, requestId, routeController);
+            loadRoadRoute(pk, ds, key, requestId, controller);
           }, 450);
         }
       } else {
