@@ -202,13 +202,8 @@ function showHome() {
         lastSearchAt = Date.now();
 
         controllers[kind] = new AbortController();
-        const url = new URL('https://photon.komoot.io/api/');
-        url.searchParams.set('q', query + ', Mossoró, Rio Grande do Norte, Brasil');
-        url.searchParams.set('lat', String(cfg.area.center.lat));
-        url.searchParams.set('lon', String(cfg.area.center.lng));
-        url.searchParams.set('zoom', '14');
-        url.searchParams.set('limit', '8');
-        url.searchParams.set('lang', 'pt');
+        const url = new URL('/api/geocode', location.origin);
+        url.searchParams.set('q', query);
 
         const response = await fetch(url, {
           headers: { Accept: 'application/json' },
@@ -217,13 +212,7 @@ function showHome() {
         if (!response.ok) {
           const detail = await response.text().catch(() => '');
           const shortDetail = detail.replace(/\s+/g, ' ').slice(0, 140);
-          throw new Error(
-            'Photon respondeu HTTP ' + response.status +
-            (response.status === 429 ? ' (limite temporário de consultas).' :
-              response.status === 403 ? ' (acesso recusado pelo serviço).' :
-                response.status >= 500 ? ' (instabilidade no serviço).' : '.') +
-            (shortDetail ? ' Detalhe: ' + shortDetail : '')
-          );
+          throw new Error(data.error || ('Busca de endereço falhou (HTTP ' + response.status + ').'));
         }
         const data = await response.json();
         results = (data.features || [])
