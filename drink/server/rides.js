@@ -564,7 +564,14 @@ function requireDriver(driverId) {
 
 export function openRequests(driverId) {
   const d = requireDriver(driverId);
-  if (!d.online || d.status !== 'aprovado' || d.cooldownUntil > now()) return [];
+  if (d.cooldownUntil > now()) {
+    const remaining = Math.ceil((d.cooldownUntil - now()) / 60000);
+    throw new HttpError(403, 'Pausa temporária por cancelamentos repetidos. Você poderá voltar em ' + remaining + ' min.');
+  }
+  if (d.status !== 'aprovado') {
+    throw new HttpError(403, 'Seu cadastro está em análise pela operação após ocorrências de pontualidade.');
+  }
+  if (!d.online) throw new HttpError(409, 'Você está offline. Ative novamente o status Online para receber solicitações.');
   return Object.values(db.rides)
     .filter((r) => r.state === 'procurando_motorista' && !r.declinedBy.includes(driverId) && !r.demoAuto)
     .map((r) => {
