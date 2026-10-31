@@ -225,7 +225,7 @@ route('GET', '/api/route', async (req) => {
       const candidate = data.routes?.[0];
       const coordinatesOut = candidate?.geometry?.coordinates;
       if (!response.ok || !candidate || !Array.isArray(coordinatesOut) ||
-          coordinatesOut.length < 2 ||
+          coordinatesOut.length < 3 ||
           !Number.isFinite(candidate.distance) || !Number.isFinite(candidate.duration)) {
         throw new Error(data.error || data.status_message || 'Valhalla não retornou uma rota de bicicleta válida.');
       }
@@ -279,9 +279,12 @@ route('GET', '/api/route', async (req) => {
 
     const result = data.routes[0];
     const coordinatesOut = result.geometry?.coordinates;
-    if (!Array.isArray(coordinatesOut) || coordinatesOut.length < 2 ||
+    const minGeometryPoints = mode === 'bike' ? 3 : 2;
+    if (!Array.isArray(coordinatesOut) || coordinatesOut.length < minGeometryPoints ||
         !Number.isFinite(result.distance) || !Number.isFinite(result.duration)) {
-      throw new R.HttpError(502, 'O serviço de rotas retornou um trajeto incompleto.');
+      throw new R.HttpError(502, mode === 'bike'
+        ? 'O serviço de bicicleta retornou uma linha sem detalhes suficientes. Não vou mover o motorista em linha reta.'
+        : 'O serviço de rotas retornou um trajeto incompleto.');
     }
     output = {
       provider: mode === 'bike' ? 'FOSSGIS-OSRM-BIKE' : 'OSRM',
