@@ -150,6 +150,7 @@ function paintRequests(view, requests) {
   }
   view.replaceChildren(...requests.map((r) => h('article', { class: 'card stack' },
     h('div', { class: 'row between' }, h('b', {}, `${r.pickup.label} para ${r.destination.label}`), h('span', { class: 'pill lime' }, brl(r.earning))),
+    r.stops?.length ? h('p', { class: 'muted small' }, `Paradas: ${r.stops.map((point) => point.label).join(' · ')}`) : null,
     h('p', { class: 'muted' }, `${km(r.distanceToClientKm)} até o cliente (~${r.etaToClientMin} min) · serviço de ${km(r.serviceKm)}, ~${r.serviceMin} min`),
     h('p', { class: 'muted' }, `${r.customerFirstName} · ${r.vehicle.model} ${r.vehicle.color} · valor líquido estimado, simulado`),
     h('div', { class: 'row' },
@@ -162,7 +163,11 @@ async function act(url, body) {
   catch (e) { toast(root, e.message); showShell(); }
 }
 
-const navLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=${p.mode || 'driving'}`;
+const navLink = (p, waypoints = []) => {
+  const params = new URLSearchParams({ api: '1', destination: `${p.lat},${p.lng}`, travelmode: p.mode || 'driving' });
+  if (waypoints.length) params.set('waypoints', waypoints.map((point) => `${point.lat},${point.lng}`).join('|'));
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+};
 
 function paintActive(view, ride) {
   // O mapa é atualizado a cada consulta, sem redesenhar o checklist em preenchimento.
@@ -171,7 +176,7 @@ function paintActive(view, ride) {
   if (view.dataset.key === key) {
     if (view.pickupMap) {
       view.pickupMap.update({
-        pickup: ride.pickup, dest: ride.destination, state: ride.state,
+        pickup: ride.pickup, dest: ride.destination, stops: ride.stops, state: ride.state,
         driver: ride.driverPosition, driverProgress: ride.driverProgress,
         driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
       });
@@ -189,12 +194,13 @@ function paintActive(view, ride) {
   const head = h('div', { class: 'stack' },
     h('div', { class: 'row between' }, h('h2', {}, `Atendimento ${ride.code}`), h('span', { class: 'pill lime' }, ride.stateLabel)),
     h('p', {}, h('b', {}, `${ride.pickup.label} para ${ride.destination.label}`)),
+    ride.stops?.length ? h('p', { class: 'muted' }, `Paradas previstas: ${ride.stops.map((point) => point.label).join(' · ')} · 5 min de espera estimada por parada`) : null,
     h('p', { class: 'muted' }, `${ride.customer.firstName} · ${ride.vehicle.model} ${ride.vehicle.color}, placa ${ride.vehicle.plate} · você recebe ${brl(ride.driverEarning)} (simulado)`));
   const out = [head];
   if (headingToPickup) {
     if (!view.pickupMap) view.pickupMap = mapView(cfg);
     view.pickupMap.update({
-      pickup: ride.pickup, dest: ride.destination, state: ride.state,
+      pickup: ride.pickup, dest: ride.destination, stops: ride.stops, state: ride.state,
       driver: ride.driverPosition, driverProgress: ride.driverProgress,
       driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
     });
@@ -207,7 +213,7 @@ function paintActive(view, ride) {
     view.pickupMap = null;
   }
   const target = ['servico_iniciado', 'em_andamento'].includes(ride.state) ? ride.destination : null;
-  if (target) out.push(h('a', { class: 'btn ghost', href: navLink({ ...target, mode: 'driving' }), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação no app de mapas'));
+  if (target) out.push(h('a', { class: 'btn ghost', href: navLink({ ...target, mode: 'driving' }, ride.stops || []), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação no app de mapas'));
 
   if (ride.state === 'verificacao_pre_servico') out.push(verificationForm(ride));
   else if (steps[ride.state]) {
