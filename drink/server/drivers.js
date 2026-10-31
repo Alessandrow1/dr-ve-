@@ -59,9 +59,27 @@ export function applyDriver(body) {
   return db.drivers[id];
 }
 
+export function setDriverPhoto(id, photo) {
+  const d = db.drivers[id];
+  if (!d || d.isBot) throw new HttpError(401, 'Motorista não identificado.');
+  if (photo === null || photo === '') {
+    d.photoUrl = null;
+  } else {
+    const value = String(photo);
+    if (value.length > 180000) throw new HttpError(413, 'A foto ficou muito grande. Escolha outra imagem.');
+    if (!/^data:image\\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(value)) {
+      throw new HttpError(422, 'Envie uma foto JPG válida.');
+    }
+    d.photoUrl = value;
+  }
+  persist();
+  publish('drivers', 'requests', {});
+  return publicDriver(d);
+}
+
 export function publicDriver(d) {
   return {
-    id: d.id, publicId: d.publicId, name: d.name, status: d.status, online: d.online, isBot: d.isBot,
+    id: d.id, publicId: d.publicId, name: d.name, status: d.status, online: d.online, isBot: d.isBot, photoUrl: d.photoUrl || null,
     rating: Math.round(d.rating * 10) / 10, ridesDone: d.ridesDone, transport: d.transport, compliance: d.compliance,
   };
 }
