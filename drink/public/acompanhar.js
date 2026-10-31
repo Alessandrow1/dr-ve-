@@ -23,7 +23,11 @@ async function boot() {
     sub.textContent = `${r.customerFirstName} segue de ${r.pickup.label} para ${r.destination.label}, no ${r.vehicle.model} ${r.vehicle.color}.${r.driverFirstName ? ` Motorista: ${r.driverFirstName}.` : ''}`;
     eta.hidden = !r.etaMin; eta.textContent = `~${r.etaMin} min`;
     gpsWarning.hidden = r.driverGpsFresh !== false;
-    map.update({ pickup: r.pickup, dest: r.destination, driver: r.driverPosition, driverProgress: r.driverProgress });
+    map.update({
+      pickup: r.pickup, dest: r.destination, driver: r.driverPosition,
+      driverProgress: r.driverProgress, driverPickupProgress: r.driverPickupProgress,
+      driverRouteStart: r.driverRouteStart,
+    });
   };
   const load = async () => { try { paint(await api('GET', `/api/share/${token}`)); } catch (e) { if (e.status === 404) fail(e.message); } };
   await load();
