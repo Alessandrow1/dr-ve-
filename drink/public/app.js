@@ -592,15 +592,48 @@ async function showTracking() {
   async function cancel(ride) {
     const policy = ride.cancelPolicy || { fee: ride.currentCancelFee || 0 };
     const fee = policy.fee ?? ride.currentCancelFee ?? 0;
-    const message = policy.reason === 'motorista_sem_progresso'
-      ? 'O motorista ficou 3 minutos sem avançar. Você pode cancelar sem custo. Deseja cancelar?'
-      : policy.reason === 'motorista_atrasado'
-        ? 'O motorista ultrapassou a previsão em mais de 5 minutos. Você pode cancelar sem custo. Deseja cancelar?'
+    const freeByProgress = policy.reason === 'motorista_sem_progresso';
+    const freeByDelay = policy.reason === 'motorista_atrasado';
+    const free = fee <= 0;
+    const explanation = freeByProgress
+      ? 'O GPS não registrou avanço do motorista em direção ao embarque por 3 minutos, com sinal recente.'
+      : freeByDelay
+        ? 'A previsão original de chegada foi ultrapassada em pelo menos 5 minutos.'
         : fee > 0
-          ? `Cancelar agora gera uma taxa de ${brl(fee)}. Deseja cancelar?`
-          : 'Cancelar esta solicitação sem custo?';
-    if (!confirm(message)) return;
-    try { paint(await api('POST', `/api/rides/${ride.id}/cancel`, { headers: authH() })); } catch (e) { toast(root, e.message); }
+          ? 'O motorista já iniciou o deslocamento ou chegou ao embarque. A taxa cobre parte do deslocamento realizado.'
+          : 'Neste momento, a solicitação pode ser encerrada sem nenhuma cobrança.';
+    let closeDialog = () => {};
+    const confirmCancel = h('button', {
+      class: 'btn warn',
+      type: 'button',
+      onclick: async (event) => {
+        busy(event.currentTarget, true);
+        closeDialog();
+        try {
+          paint(await api('POST', `/api/rides/${ride.id}/cancel`, { headers: authH() }));
+        } catch (error) {
+          toast(root, error.message);
+        }
+      },
+    }, 'Confirmar cancelamento');
+    const content = h('div', { class: 'stack cancel-dialog' },
+      h('div', { class: `cancel-summary ${free ? 'free' : 'fee'}` },
+        h('div', { class: 'cancel-icon', 'aria-hidden': 'true' }, free ? '✓' : '!'),
+        h('div', { class: 'cancel-copy' },
+          h('span', { class: 'cancel-kicker' }, free ? 'CANCELAMENTO GRATUITO' : 'TAXA DE CANCELAMENTO'),
+          h('strong', { class: 'cancel-value' }, free ? 'R$ 0,00' : brl(fee)),
+          h('p', {}, explanation))),
+      h('div', { class: 'cancel-trip card' },
+        h('span', { class: 'muted small' }, 'SUA SOLICITAÇÃO'),
+        h('b', {}, ride.pickup.label),
+        h('span', { class: 'muted small' }, 'até'),
+        h('b', {}, ride.destination.label)),
+      h('p', { class: 'muted small' }, free
+        ? 'Nenhum valor será capturado da autorização de pagamento.'
+        : 'A cobrança será limitada ao valor informado acima. O restante da autorização será liberado.'),
+      confirmCancel,
+      h('button', { class: 'btn ghost', type: 'button', onclick: () => closeDialog() }, 'Continuar aguardando'));
+    closeDialog = modal(root, 'Cancelar solicitação', content);
   }
   const refresh = async () => {
     try { paint(await api('GET', `/api/rides/${S.ride.id}`, { headers: authH() })); offline.hidden = true; }
@@ -642,13 +675,30 @@ function showFinished() {
 
 function showCancelled() {
   const ride = S.ride;
-  const reasons = { equipamento_inviavel: 'O motorista não conseguiu levar o equipamento com segurança, então o pedido foi cancelado sem custo para você.', falha_verificacao_identidade: 'A verificação de identidade falhou três vezes. Por segurança, o pedido foi encerrado sem custo.' };
-  frame(topbar(), h('section', { class: 'sheet full stack' },
-    h('h1', {}, 'Corrida cancelada'),
-    h('p', { class: 'muted' }, reasons[ride.cancel?.reason] || (ride.cancel?.by === 'cliente' ? 'Você cancelou esta solicitação.' : 'A solicitação foi cancelada.')),
-    h('div', { class: 'card' }, h('b', {}, ride.cancel?.fee > 0 ? `Taxa de cancelamento: ${brl(ride.cancel.fee)}` : 'Sem cobrança'), h('p', { class: 'muted' }, 'Valores de demonstração.')),
-    h('button', { class: 'btn ghost', onclick: () => openReceipt(ride.id, S.token) }, 'Ver recibo'),
-    h('button', { class: 'btn', onclick: showHome }, 'Pedir outro motorista')));
+  const reasons = {
+    equipamento_inviavel: 'O motorista identificou que não era possível transportar o equipamento com segurança.',
+    falha_verificacao_identidade: 'A verificação de identidade não foi concluída corretamente. Por segurança, a solicitação foi encerrada.',
+    motorista_sem_progresso: 'O motorista ficou 3 minutos sem avanço detectável em direção ao embarque. Você não pagou taxa de cancelamento.',
+    motorista_atrasado: 'A previsão original de chegada foi ultrapassada em pelo menos 5 minutos. Você não pagou taxa de cancelamento.',
+    cancelado_pelo_cliente: 'A solicitação foi encerrada conforme pedido.',
+  };
+  const fee = Number(ride.cancel?.fee || 0);
+  const free = fee <= 0;
+  frame(topbar(), h('section', { class: 'sheet full stack cancel-result-page' },
+    h('div', { class: `cancel-result-mark ${free ? 'free' : 'fee'}` }, free ? '✓' : '!'),
+    h('h1', {}, 'Solicitação cancelada'),
+    h('p', { class: 'muted' }, reasons[ride.cancel?.reason] || (ride.cancel?.by === 'cliente' ? 'Você cancelou esta solicitação.' : 'A solicitação foi encerrada.')),
+    h('div', { class: `cancel-summary ${free ? 'free' : 'fee'}` },
+      h('span', { class: 'cancel-kicker' }, free ? 'NENHUMA COBRANÇA' : 'TAXA DE CANCELAMENTO'),
+      h('strong', { class: 'cancel-value' }, free ? 'R$ 0,00' : brl(fee)),
+      h('p', { class: 'muted small' }, free ? 'A autorização do pagamento foi liberada.' : 'Este é o valor final da taxa de cancelamento.')),
+    h('div', { class: 'cancel-trip card' },
+      h('span', { class: 'muted small' }, 'TRAJETO SOLICITADO'),
+      h('b', {}, ride.pickup.label),
+      h('span', { class: 'muted small' }, 'até'),
+      h('b', {}, ride.destination.label)),
+    h('button', { class: 'btn ghost', onclick: () => openReceipt(ride.id, S.token) }, 'Ver comprovante'),
+    h('button', { class: 'btn', onclick: showHome }, 'Voltar ao início')));
 }
 
 // ---------- inicialização ----------
