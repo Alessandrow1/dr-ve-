@@ -214,7 +214,17 @@ function showHome() {
           headers: { Accept: 'application/json' },
           signal: controllers[kind].signal,
         });
-        if (!response.ok) throw new Error('O serviço de endereços não respondeu. Tente novamente.');
+        if (!response.ok) {
+          const detail = await response.text().catch(() => '');
+          const shortDetail = detail.replace(/\s+/g, ' ').slice(0, 140);
+          throw new Error(
+            'Photon respondeu HTTP ' + response.status +
+            (response.status === 429 ? ' (limite temporário de consultas).' :
+              response.status === 403 ? ' (acesso recusado pelo serviço).' :
+                response.status >= 500 ? ' (instabilidade no serviço).' : '.') +
+            (shortDetail ? ' Detalhe: ' + shortDetail : '')
+          );
+        }
         const data = await response.json();
         results = (data.features || [])
           .map((feature) => describeFeature(feature, query))
