@@ -716,7 +716,7 @@ function showCancelled() {
       h('span', { class: 'muted small' }, 'até'),
       h('b', {}, ride.destination.label)),
     h('button', { class: 'btn ghost', onclick: () => openReceipt(ride.id, S.token) }, 'Ver comprovante'),
-    h('button', { class: 'btn', onclick: showHome }, 'Voltar ao início')));
+    h('button', { class: 'btn', onclick: startNewRide }, 'Voltar ao início')));
 }
 
 // ---------- inicialização ----------
