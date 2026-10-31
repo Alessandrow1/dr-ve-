@@ -459,6 +459,41 @@ export function mapView(cfg) {
     return last ? { lat: Number(last[1]), lng: Number(last[0]) } : null;
   }
 
+  // Mantém visível apenas o trecho que o motorista ainda precisa percorrer até o embarque.
+  function remainingDriverRouteCoordinates(progress) {
+    if (!driverRouteCoordinates.length) return [];
+    const amount = Math.max(0, Math.min(1, Number(progress) || 0));
+    if (amount <= 0) return driverRouteCoordinates;
+    if (amount >= 0.99999) {
+      const last = driverRouteCoordinates[driverRouteCoordinates.length - 1];
+      return last ? [last] : [];
+    }
+
+    const targetKm = amount * driverRouteLengthKm;
+    for (const segment of driverRouteSegments) {
+      const endKm = segment.startKm + segment.lengthKm;
+      if (targetKm <= endKm) {
+        const ratio = segment.lengthKm > 0
+          ? Math.max(0, Math.min(1, (targetKm - segment.startKm) / segment.lengthKm))
+          : 0;
+        const current = [
+          Number(segment.a[0]) + (Number(segment.b[0]) - Number(segment.a[0])) * ratio,
+          Number(segment.a[1]) + (Number(segment.b[1]) - Number(segment.a[1])) * ratio,
+        ];
+        const nextIndex = driverRouteCoordinates.indexOf(segment.a) + 1;
+        return [current, ...driverRouteCoordinates.slice(nextIndex)];
+      }
+    }
+    return [];
+  }
+
+  function updateRemainingDriverRoute(progress) {
+    if (!driverRouteCoordinates.length) return;
+    driverRoute.setLatLngs(
+      remainingDriverRouteCoordinates(progress).map(([lng, lat]) => [Number(lat), Number(lng)]),
+    );
+  }
+
   function stopDriverPickupAnimation() {
     if (driverPickupAnimationFrame != null) cancelAnimationFrame(driverPickupAnimationFrame);
     driverPickupAnimationFrame = null;
@@ -484,6 +519,7 @@ export function mapView(cfg) {
       stopDriverPickupAnimation();
       currentDriverPickupProgress = null;
       displayedDriverPickupProgress = null;
+      updateRemainingDriverRoute(0);
       setDriverMarker(currentDriverPosition);
       return;
     }
@@ -497,6 +533,7 @@ export function mapView(cfg) {
     if (!animate || displayedDriverPickupProgress == null || target <= displayedDriverPickupProgress) {
       stopDriverPickupAnimation();
       displayedDriverPickupProgress = target;
+      updateRemainingDriverRoute(target);
       setDriverMarker(currentDriverPosition);
       return;
     }
@@ -507,6 +544,7 @@ export function mapView(cfg) {
     const tick = (nowMs) => {
       const fraction = Math.max(0, Math.min(1, (nowMs - startedAt) / durationMs));
       displayedDriverPickupProgress = from + (target - from) * fraction;
+      updateRemainingDriverRoute(displayedDriverPickupProgress);
       setDriverMarker(currentDriverPosition);
       if (fraction < 1) {
         driverPickupAnimationFrame = requestAnimationFrame(tick);
@@ -572,6 +610,7 @@ export function mapView(cfg) {
       const duration = Math.max(1, Number(data.durationMin) || 1);
       buildDriverRouteMetrics(coordinates);
       driverRoute.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
+      if (displayedDriverPickupProgress != null) updateRemainingDriverRoute(displayedDriverPickupProgress);
       if (!map.hasLayer(driverRoute)) driverRoute.addTo(map);
       driverRoute.bringToFront();
       routeLegendLabel.textContent = `Motorista · bicicleta · ${distance} km · ${duration} min`;
