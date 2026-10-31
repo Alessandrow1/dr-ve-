@@ -69,8 +69,17 @@ export function publicDriver(d) {
 export function adminListDrivers() {
   return Object.values(db.drivers).map((d) => {
     const a = db.applications[d.id];
+    const at = Date.now();
+    const issues = (Array.isArray(d.pickupIssues) ? d.pickupIssues : [])
+      .filter((event) => event.at >= at - 30 * 24 * 60 * 60 * 1000);
     return {
       ...publicDriver(d),
+      pickupReliability: {
+        issues30d: issues.length,
+        issues7d: issues.filter((event) => event.at >= at - 7 * 24 * 60 * 60 * 1000).length,
+        lastIssueAt: issues.length ? issues[issues.length - 1].at : null,
+        cooldownUntil: d.cooldownUntil || null,
+      },
       application: a
         ? { phoneMasked: a.phone.replace(/\d(?=\d{4})/g, '•'), cnhCategory: a.cnhCategory, cnhValidity: a.cnhValidity }
         : null,
@@ -85,6 +94,7 @@ export function adminSetStatus(id, action, actor = 'admin') {
   if (!map[action]) throw new HttpError(422, 'Ação inválida.');
   d.status = map[action];
   if (d.status !== 'aprovado') d.online = false;
+  if (action === 'approve') d.cooldownUntil = 0;
   audit(actor, `motorista_${map[action]}`, id);
   persist();
   publish('drivers', 'requests', {});
