@@ -9,6 +9,7 @@ if (!me) { me = { id: uid(), name: '', phone: '' }; store.set('me', me); }
 const S = {
   pickup: null, // endereço selecionado pelo cliente ou localização atual
   dest: null, // endereço selecionado pelo cliente
+  stops: [],
   quote: null,
   pay: store.get('pay', 'pix'),
   ride: null,
@@ -164,6 +165,7 @@ async function openReceipt(id, token) {
 function startNewRide() {
   S.pickup = null;
   S.dest = null;
+  S.stops = [];
   S.quote = null;
   S.ride = null;
   S.token = null;
@@ -189,11 +191,15 @@ function showHome() {
   });
   const pickupResults = h('div', { class: 'address-results', role: 'listbox', 'aria-label': 'Sugestões de embarque' });
   const destResults = h('div', { class: 'address-results', role: 'listbox', 'aria-label': 'Sugestões de destino' });
+  const stopFields = [];
+  const stopFieldsContainer = h('div', { class: 'stack' });
+  const addStopBtn = h('button', { class: 'btn ghost small', type: 'button', onclick: () => addStop() }, '+ Adicionar parada');
+  const getStops = () => stopFields.map((entry) => entry.point).filter(Boolean);
   const gpsBtn = h('button', { class: 'btn ghost small location-pickup', onclick: useGps }, 'Usar minha localização no embarque');
 
   const cache = new Map();
-  const timers = { pickup: null, dest: null };
-  const controllers = { pickup: null, dest: null };
+  const timers = Object.create(null);
+  const controllers = Object.create(null);
   let lastSearchAt = 0;
   let quoteRequestId = 0;
 
@@ -234,9 +240,15 @@ function showHome() {
     if (kind === 'pickup') {
       S.pickup = point;
       pickupInput.value = point.label;
-    } else {
+    } else if (kind === 'dest') {
       S.dest = point;
       destInput.value = point.label;
+    } else {
+      const entry = stopFields.find((item) => item.kind === kind);
+      if (!entry) return;
+      entry.point = point;
+      entry.input.value = point.label;
+      S.stops = getStops();
     }
     rememberAddress(point);
     container.replaceChildren();
@@ -340,7 +352,7 @@ function showHome() {
           class: 'address-result', type: 'button', role: 'option',
           onclick: () => selectAddress(kind, result.point, container),
         },
-          h('span', { class: 'address-result-icon', 'aria-hidden': 'true' }, kind === 'pickup' ? '●' : '◆'),
+          h('span', { class: 'address-result-icon', 'aria-hidden': 'true' }, kind === 'dest' ? '◆' : '●'),
           h('span', { class: 'address-result-copy' },
             h('strong', {}, result.title),
             h('small', {}, result.subtitle || 'Mossoró, RN')))));
@@ -357,10 +369,15 @@ function showHome() {
     controllers[kind]?.abort();
     quoteRequestId += 1;
     if (kind === 'pickup') S.pickup = null;
-    else S.dest = null;
+    else if (kind === 'dest') S.dest = null;
+    else {
+      const entry = stopFields.find((item) => item.kind === kind);
+      if (entry) entry.point = null;
+      S.stops = getStops();
+    }
     S.quote = null;
     paintQuote();
-    map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest) });
+    map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest), stops: S.stops });
 
     const query = input.value.trim();
     if (query.length < 4) {
@@ -391,6 +408,66 @@ function showHome() {
   destInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timers.dest); searchAddress('dest', destInput, destResults); }
   });
+
+  function addStop(initialPoint = null) {
+    if (stopFields.length >= 2) return;
+    const kind = 'stop:' + uid();
+    const input = h('input', {
+      type: 'search', placeholder: 'Rua, número e bairro', autocomplete: 'off',
+      'aria-label': 'Endereço da parada', enterkeyhint: 'search',
+    });
+    const results = h('div', { class: 'address-results', role: 'listbox', 'aria-label': 'Sugestões da parada' });
+    const entry = { kind, input, results, point: initialPoint };
+    if (initialPoint) input.value = initialPoint.label;
+
+    input.addEventListener('focus', () => {
+      if (!input.value.trim()) renderRecentAddresses(kind, results);
+    });
+    input.addEventListener('input', () => {
+      scheduleSearch(kind, input, results);
+      if (!input.value.trim()) renderRecentAddresses(kind, results);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        clearTimeout(timers[kind]);
+        searchAddress(kind, input, results);
+      }
+    });
+
+    const remove = h('button', {
+      class: 'btn ghost small', type: 'button', 'aria-label': 'Remover parada',
+      onclick: () => {
+        clearTimeout(timers[kind]);
+        controllers[kind]?.abort();
+        const index = stopFields.indexOf(entry);
+        if (index >= 0) stopFields.splice(index, 1);
+        delete timers[kind];
+        delete controllers[kind];
+        S.stops = getStops();
+        renderStopFields();
+        refresh();
+      },
+    }, 'Remover');
+    entry.element = h('div', { class: 'stack stop-field' },
+      h('div', { class: 'row between' }, h('b', {}, `Parada ${stopFields.length + 1}`), remove),
+      h('label', { class: 'field address-field' },
+        h('span', {}, 'Endereço da parada'),
+        h('span', { class: 'address-input-wrap' },
+          h('span', { class: 'address-dot destination-dot', 'aria-hidden': 'true' }), input)),
+      results);
+    stopFields.push(entry);
+    S.stops = getStops();
+    renderStopFields();
+    paintQuote();
+    map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest), stops: S.stops });
+  }
+
+  function renderStopFields() {
+    stopFieldsContainer.replaceChildren(...stopFields.map((entry) => entry.element));
+    addStopBtn.disabled = stopFields.length >= 2;
+    addStopBtn.textContent = stopFields.length >= 2 ? 'Máximo de 2 paradas' : '+ Adicionar parada';
+  }
 
   function useGps() {
     clearTimeout(timers.pickup);
@@ -425,7 +502,8 @@ function showHome() {
     if (!q) { quoteBox.replaceChildren(); return; }
     quoteBox.replaceChildren(h('div', { class: 'row between' },
       h('div', {}, h('div', { class: 'price' }, brl(q.total), h('small', {}, 'estimativa')),
-        h('p', { class: 'muted' }, km(q.distanceKm) + ' · cerca de ' + q.durationMin + ' min de viagem')),
+        h('p', { class: 'muted' }, km(q.distanceKm) + ' · cerca de ' + q.durationMin + ' min de viagem'),
+        q.stopsCount ? h('p', { class: 'muted small' }, `${q.stopsCount} ${q.stopsCount === 1 ? 'parada' : 'paradas'} · inclui ${q.stopWaitMin} min de espera estimada`) : null),
       h('div', { style: 'text-align:right' },
         h('span', { class: 'pill lime' }, 'Chega em ~' + q.etaMin + ' min'),
         q.etaEstimated ? h('p', { class: 'muted small' }, 'tempo estimado') : null)));
@@ -434,7 +512,14 @@ function showHome() {
   async function refresh() {
     const requestId = ++quoteRequestId;
     err.textContent = '';
-    map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest) });
+    S.stops = getStops();
+    map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest), stops: S.stops });
+    if (stopFields.some((entry) => !entry.point)) {
+      S.quote = null;
+      paintQuote();
+      err.textContent = 'Selecione um endereço válido para cada parada ou remova o campo vazio.';
+      return;
+    }
     if (!S.pickup || !S.dest) {
       S.quote = null;
       paintQuote();
@@ -443,7 +528,7 @@ function showHome() {
     cta.disabled = true;
     try {
       const quote = await api('POST', '/api/quote', {
-        body: { pickup: S.pickup, destination: S.dest },
+        body: { pickup: S.pickup, destination: S.dest, stops: S.stops },
       });
       if (requestId !== quoteRequestId) return;
       S.quote = quote;
@@ -470,6 +555,10 @@ function showHome() {
             pickupInput)),
         pickupResults,
         gpsBtn,
+        h('div', { class: 'row between', style: 'margin-top:14px' },
+          h('b', {}, 'Paradas intermediárias (opcional)'),
+          addStopBtn),
+        stopFieldsContainer,
         h('div', { class: 'address-separator' }),
         h('label', { class: 'field address-field' },
           h('span', {}, 'Destino'),
@@ -508,7 +597,7 @@ function showRequest() {
     busy(go, true);
     try {
       const created = await api('POST', '/api/rides', { body: {
-        customer: { id: me.id, name: me.name, phone: me.phone }, pickup: S.pickup, destination: S.dest, vehicle,
+        customer: { id: me.id, name: me.name, phone: me.phone }, pickup: S.pickup, destination: S.dest, stops: S.stops, vehicle,
         authorization: auth.checked, paymentMethod: S.pay, demoAuto: demo.checked,
         share: shareOn.checked ? { consent: true, name: shareName.value.trim() } : undefined } });
       S.ride = created.ride; S.token = created.token; store.set('ride', { id: created.ride.id, token: created.token });
@@ -522,7 +611,7 @@ function showRequest() {
 
   frame(topbar(), h('section', { class: 'sheet full stack', style: 'overflow-y:auto' },
     h('div', { class: 'row between' }, h('h1', {}, 'Confirmar pedido'), h('button', { class: 'btn ghost small', onclick: showHome }, 'Voltar')),
-    h('p', { class: 'muted' }, `${placeName(S.pickup)} para ${placeName(S.dest)}`),
+    h('p', { class: 'muted' }, `${[placeName(S.pickup), ...S.stops.map((point) => point.label), placeName(S.dest)].join(' → ')}`),
     h('h2', {}, 'Seu carro'),
     h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', {}, 'Modelo'), model), h('label', { class: 'field' }, h('span', {}, 'Cor'), color)),
     h('label', { class: 'field' }, h('span', {}, 'Placa'), plate),
@@ -577,7 +666,7 @@ async function showTracking() {
     map.update({
       pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition, state: ride.state,
       driverProgress: ride.driverProgress, driverPickupProgress: ride.driverPickupProgress,
-      driverRouteStart: ride.driverRouteStart,
+      driverRouteStart: ride.driverRouteStart, stops: ride.stops,
     });
     if (key === shown) return; shown = key;
     const idx = FLOW.indexOf(ride.state);
