@@ -94,7 +94,10 @@ export function adminSetStatus(id, action, actor = 'admin') {
   if (!map[action]) throw new HttpError(422, 'Ação inválida.');
   d.status = map[action];
   if (d.status !== 'aprovado') d.online = false;
-  if (action === 'approve') d.cooldownUntil = 0;
+  if (action === 'approve') {
+    d.cooldownUntil = 0;
+    d.pickupIssues = []; // revisão concluída: zera as advertências ativas; auditoria e ocorrências permanecem.
+  }
   audit(actor, `motorista_${map[action]}`, id);
   persist();
   publish('drivers', 'requests', {});
