@@ -209,12 +209,10 @@ function showHome() {
           headers: { Accept: 'application/json' },
           signal: controllers[kind].signal,
         });
+        const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          const detail = await response.text().catch(() => '');
-          const shortDetail = detail.replace(/\s+/g, ' ').slice(0, 140);
           throw new Error(data.error || ('Busca de endereço falhou (HTTP ' + response.status + ').'));
         }
-        const data = await response.json();
         results = (data.features || [])
           .map((feature) => describeFeature(feature, query))
           .filter((item) => item && haversineKm(cfg.area.center, item.point) <= cfg.area.radiusKm);
