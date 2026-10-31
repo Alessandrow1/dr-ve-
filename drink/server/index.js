@@ -168,6 +168,7 @@ function fetchOsrmLimited(url) {
 // Rota viária real (carro) para o mapa do cliente.
 route('GET', '/api/route', async (req) => {
   const params = new URL(req.url, 'http://localhost').searchParams;
+  const mode = params.get('mode') === 'bike' ? 'bike' : 'car';
   const pickup = {
     lat: Number(params.get('pickupLat')),
     lng: Number(params.get('pickupLng')),
@@ -188,13 +189,18 @@ route('GET', '/api/route', async (req) => {
     throw new R.HttpError(422, 'A rota precisa começar e terminar dentro da área de Mossoró.');
   }
 
-  const cacheKey = [pickup.lat, pickup.lng, dest.lat, dest.lng]
-    .map((value) => value.toFixed(5)).join(',');
+  const cacheKey = [mode, pickup.lat, pickup.lng, dest.lat, dest.lng]
+    .map((value) => typeof value === 'number' ? value.toFixed(5) : value).join(',');
   const cached = routeCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   const coordinates = `${pickup.lng},${pickup.lat};${dest.lng},${dest.lat}`;
-  const upstream = new URL(`https://router.project-osrm.org/route/v1/driving/${coordinates}`);
+  // O perfil bike usa a instância FOSSGIS específica para bicicletas. O perfil de carro
+  // existente continua no demo OSRM original para não alterar as rotas do cliente.
+  const baseUrl = mode === 'bike'
+    ? 'https://routing.openstreetmap.de/routed-bike'
+    : 'https://router.project-osrm.org';
+  const upstream = new URL(`${baseUrl}/route/v1/driving/${coordinates}`);
   upstream.searchParams.set('overview', 'full');
   upstream.searchParams.set('geometries', 'geojson');
   upstream.searchParams.set('steps', 'false');
@@ -230,7 +236,8 @@ route('GET', '/api/route', async (req) => {
   }
 
   const output = {
-    provider: 'OSRM',
+    provider: mode === 'bike' ? 'FOSSGIS-OSRM-BIKE' : 'OSRM',
+    mode,
     distanceKm: Math.round((result.distance / 1000) * 10) / 10,
     durationMin: Math.max(1, Math.round(result.duration / 60)),
     geometry: result.geometry,
