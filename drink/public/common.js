@@ -105,47 +105,72 @@ export function stream(url, onRide) {
   return () => es.close();
 }
 
-// ---------- mapa real com Leaflet + OpenStreetMap ----------
+// ---------- mapa escuro com Leaflet + Stadia Maps / OpenStreetMap ----------
 export function mapView(cfg) {
   const center = cfg.area?.center || { lat: -5.1875, lng: -37.344 };
   const mapEl = h('div', {
     class: 'leaflet-map',
     role: 'application',
-    'aria-label': 'Mapa de ruas de Mossoró com embarque, destino e motorista',
+    'aria-label': 'Mapa de ruas de Mossoró com embarque, destino e localização atual',
   });
-  const el = h('div', { class: 'mapwrap' },
-    mapEl,
-    h('span', { class: 'map-note' }, 'Ruas reais · Mossoró/RN'));
+  const note = h('span', { class: 'map-note' }, 'MOSSORÓ · RN');
+  const recenter = h('button', {
+    class: 'map-recenter',
+    type: 'button',
+    title: 'Centralizar na minha localização',
+    'aria-label': 'Centralizar na minha localização',
+    onclick: locate,
+  },
+    h('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+      h('circle', { cx: '12', cy: '12', r: '7' }),
+      h('circle', { cx: '12', cy: '12', r: '2' }),
+      h('path', { d: 'M12 2v3M12 19v3M2 12h3M19 12h3' })));
+  const el = h('div', { class: 'mapwrap' }, mapEl, note, recenter);
 
   if (!globalThis.L) {
     mapEl.textContent = 'Não foi possível carregar o mapa. Verifique sua conexão e atualize a página.';
+    recenter.disabled = true;
     return { el, update() {} };
   }
 
   const map = L.map(mapEl, {
-    zoomControl: true,
+    zoomControl: false,
     attributionControl: true,
     scrollWheelZoom: false,
-  }).setView([center.lat, center.lng], 13);
+  }).setView([center.lat, center.lng], 14);
 
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+  const tiles = L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20,
+    attribution:
+      '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> ' +
+      '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> ' +
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
   }).addTo(map);
 
-  const pickup = L.circleMarker([center.lat, center.lng], {
-    radius: 8, color: '#101010', weight: 2, fillColor: '#B8FF5C', fillOpacity: 1,
+  tiles.on('tileerror', () => {
+    note.textContent = 'MAPA INDISPONÍVEL · confira a conexão';
+    note.classList.add('map-note-error');
   });
-  const dest = L.circleMarker([center.lat, center.lng], {
-    radius: 8, color: '#101010', weight: 2, fillColor: '#FFFFFF', fillOpacity: 1,
+  tiles.on('load', () => {
+    note.textContent = 'MOSSORÓ · RN';
+    note.classList.remove('map-note-error');
   });
-  const driver = L.circleMarker([center.lat, center.lng], {
-    radius: 7, color: '#101010', weight: 2, fillColor: '#65B8FF', fillOpacity: 1,
+
+  const markerStyle = (fillColor) => ({
+    radius: 8, color: '#101010', weight: 2, fillColor, fillOpacity: 1,
+  });
+  const pickup = L.circleMarker([center.lat, center.lng], markerStyle('#B8FF5C'));
+  const dest = L.circleMarker([center.lat, center.lng], markerStyle('#FFFFFF'));
+  const driver = L.circleMarker([center.lat, center.lng], markerStyle('#65B8FF'));
+  const user = L.circleMarker([center.lat, center.lng], {
+    radius: 7, color: '#FFFFFF', weight: 3, fillColor: '#4D9FFF', fillOpacity: 1,
   });
   const route = L.polyline([], {
-    color: '#8BC443', weight: 5, opacity: 0.9, lineCap: 'round',
+    color: '#B8FF5C', weight: 5, opacity: 0.92, lineCap: 'round', dashArray: '8 8',
   });
   let lastRouteKey = '';
+  let locating = false;
 
   function setMarker(marker, point) {
     if (!point || !Number.isFinite(Number(point.lat)) || !Number.isFinite(Number(point.lng))) {
@@ -156,8 +181,29 @@ export function mapView(cfg) {
     marker.setLatLng([Number(point.lat), Number(point.lng)]);
   }
 
-  // O primeiro mapa pode ser criado antes de entrar no DOM; recalculamos o tamanho após a renderização.
-  requestAnimationFrame(() => map.invalidateSize());
+  function locate() {
+    if (locating) return;
+    if (!navigator.geolocation) {
+      note.textContent = 'LOCALIZAÇÃO NÃO DISPONÍVEL NESTE APARELHO';
+      return;
+    }
+    locating = true;
+    recenter.disabled = true;
+    navigator.geolocation.getCurrentPosition((position) => {
+      locating = false;
+      recenter.disabled = false;
+      const point = { lat: position.coords.latitude, lng: position.coords.longitude };
+      setMarker(user, point);
+      map.flyTo([point.lat, point.lng], 16, { duration: 0.8 });
+      note.textContent = 'SUA LOCALIZAÇÃO';
+    }, () => {
+      locating = false;
+      recenter.disabled = false;
+      note.textContent = 'NÃO FOI POSSÍVEL LOCALIZAR';
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+  }
+
+  requestAnimationFrame(() => requestAnimationFrame(() => map.invalidateSize({ pan: false })));
 
   return {
     el,
@@ -170,15 +216,16 @@ export function mapView(cfg) {
         const points = [[Number(pk.lat), Number(pk.lng)], [Number(ds.lat), Number(ds.lng)]];
         route.setLatLngs(points);
         if (!map.hasLayer(route)) route.addTo(map);
-
         const key = points.map((p) => p.map((v) => v.toFixed(5)).join(',')).join('|');
         if (key !== lastRouteKey) {
-          map.fitBounds(route.getBounds().pad(0.18), { maxZoom: 15, animate: false });
+          map.fitBounds(route.getBounds().pad(0.2), { maxZoom: 16, animate: true });
           lastRouteKey = key;
         }
       } else {
         if (map.hasLayer(route)) map.removeLayer(route);
         lastRouteKey = '';
+        const single = pk || ds;
+        if (single) map.setView([single.lat, single.lng], 16, { animate: true });
       }
     },
   };
