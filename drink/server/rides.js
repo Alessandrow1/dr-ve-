@@ -200,6 +200,23 @@ export function authDriverFor(ride, driverId) {
   if (ride.driverId !== driverId) throw new HttpError(403, 'Esta corrida não está atribuída a você.');
 }
 
+// Interpola a posição ao longo dos trechos da viagem, passando pelas paradas em ordem.
+function routePointAtProgress(ride, progress) {
+  const points = [ride.pickup, ...(ride.stops || []), ride.destination];
+  const legs = [];
+  let totalKm = 0;
+  for (let i = 1; i < points.length; i++) {
+    const distanceKm = haversineKm(points[i - 1], points[i]);
+    legs.push({ from: points[i - 1], to: points[i], distanceKm, startKm: totalKm });
+    totalKm += distanceKm;
+  }
+  if (!totalKm) return ride.destination;
+  const targetKm = Math.max(0, Math.min(1, Number(progress))) * totalKm;
+  const leg = legs.find((item) => targetKm <= item.startKm + item.distanceKm) || legs[legs.length - 1];
+  const fraction = leg.distanceKm > 0 ? Math.max(0, Math.min(1, (targetKm - leg.startKm) / leg.distanceKm)) : 0;
+  return lerp(leg.from, leg.to, fraction);
+}
+
 // ---------- posição simulada / real ----------
 function positionInfo(ride) {
   const d = ride.driverId ? db.drivers[ride.driverId] : null;
@@ -247,7 +264,7 @@ function positionInfo(ride) {
       }
       const t = Math.max(0, Math.min(1, elapsed / T));
       return {
-        pos: lerp(ride.pickup, ride.destination, t),
+        pos: routePointAtProgress(ride, t),
         etaMin: Math.max(1, Math.ceil(q.durationMin * (1 - t))),
         progress: t,
       };
@@ -274,6 +291,7 @@ export function view(ride, role) {
     updatedAt: ride.updatedAt,
     pickup: pt(ride.pickup),
     destination: pt(ride.destination),
+    stops: (ride.stops || []).map(pt),
     quote: ride.quote,
     timeline: ride.timeline,
     driverPosition: pos,
@@ -294,6 +312,7 @@ export function view(ride, role) {
       stateLabel: base.stateLabel,
       pickup: base.pickup,
       destination: base.destination,
+      stops: base.stops,
       driverPosition: base.driverPosition,
       driverProgress: base.driverProgress,
       driverPickupProgress: base.driverPickupProgress,
@@ -369,17 +388,31 @@ function notify(ride) {
 export function makeQuote(body) {
   const pickup = resolvePoint(body?.pickup);
   const dest = resolvePoint(body?.destination);
+  const rawStops = Array.isArray(body?.stops) ? body.stops : [];
+  if (rawStops.length > 2) throw new HttpError(422, 'Você pode adicionar no máximo 2 paradas.');
+  const stops = rawStops.map((point) => resolvePoint(point));
   if (!pickup) throw new HttpError(422, 'Informe o local de embarque.');
   if (!dest) throw new HttpError(422, 'Informe o destino.');
-  if (!insideServiceArea(pickup) || !insideServiceArea(dest)) {
+  if (stops.some((point) => !point)) throw new HttpError(422, 'Selecione um endereço válido para cada parada.');
+  const points = [pickup, ...stops, dest];
+  if (points.some((point) => !insideServiceArea(point))) {
     throw new HttpError(422, 'Fora da área de atendimento. No momento atendemos somente Mossoró (RN).');
   }
-  if (haversineKm(pickup, dest) < 0.3) throw new HttpError(422, 'Embarque e destino estão muito próximos.');
-  return { pickup, dest, quote: buildQuote({ pickup, dest, tariff: tariff(), onlineDrivers: onlineDrivers() }) };
+  if (points.some((point, index) => index > 0 && haversineKm(points[index - 1], point) < 0.1)) {
+    throw new HttpError(422, 'Dois pontos da viagem estão muito próximos. Confira a ordem dos endereços.');
+  }
+  const totalDistance = points.slice(1).reduce((sum, point, index) => sum + haversineKm(points[index], point), 0);
+  if (totalDistance < 0.3) throw new HttpError(422, 'Embarque e destino estão muito próximos.');
+  return {
+    pickup,
+    dest,
+    stops,
+    quote: buildQuote({ pickup, dest, stops, tariff: tariff(), onlineDrivers: onlineDrivers() }),
+  };
 }
 
 export function createRide(body) {
-  const { pickup, dest, quote } = makeQuote(body);
+  const { pickup, dest, stops, quote } = makeQuote(body);
   const c = body.customer || {};
   const name = String(c.name || '').trim();
   if (name.length < 2) throw new HttpError(422, 'Informe seu nome.');
@@ -416,6 +449,7 @@ export function createRide(body) {
     customer: { id: String(c.id), name: name.slice(0, 60), phone: String(c.phone || '').slice(0, 20) },
     pickup,
     destination: dest,
+    stops,
     vehicle: { model: model.slice(0, 40), color: color.slice(0, 20), plate },
     authorizationConfirmed: true,
     paymentMethod: method,
@@ -580,6 +614,7 @@ export function receipt(ride) {
     finishedAt: ride.finishedAt || ride.cancel?.at || ride.updatedAt,
     pickup: ride.pickup.label,
     destination: ride.destination.label,
+    stops: (ride.stops || []).map((point) => point.label),
     driver: d ? { name: d.name, publicId: d.publicId } : null,
     vehicle: ride.vehicle,
     lines: ride.state === 'cancelado' ? [{ label: 'Taxa de cancelamento', amount: charged }] : ride.quote.lines,
@@ -617,6 +652,7 @@ export function openRequests(driverId) {
         code: r.code,
         pickup: pt(r.pickup),
         destination: pt(r.destination),
+        stops: (r.stops || []).map(pt),
         distanceToClientKm: toClient,
         etaToClientMin: Math.ceil((toClient / tariff().avgBikeKmh) * 60),
         serviceKm: r.quote.distanceKm,
