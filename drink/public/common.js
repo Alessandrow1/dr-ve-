@@ -158,6 +158,23 @@ export function mapView(cfg) {
     scrollWheelZoom: false,
   }).setView([center.lat, center.lng], 14);
 
+  // Depois que a pessoa mexe no mapa, atualizações de GPS/rota não devem
+  // sobrescrever o zoom ou a área que ela escolheu visualizar.
+  let userAdjustedView = false;
+  mapEl.addEventListener('pointerdown', () => { userAdjustedView = true; }, { passive: true });
+  mapEl.addEventListener('wheel', () => { userAdjustedView = true; }, { passive: true });
+  mapEl.addEventListener('touchstart', () => { userAdjustedView = true; }, { passive: true });
+  const fitBoundsIfFollowing = (bounds, options) => {
+    if (userAdjustedView) return false;
+    map.fitBounds(bounds, options);
+    return true;
+  };
+  const setViewIfFollowing = (point, zoom, options) => {
+    if (userAdjustedView) return false;
+    map.setView(point, zoom, options);
+    return true;
+  };
+
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
   const tileUrls = {
     dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
@@ -556,7 +573,7 @@ export function mapView(cfg) {
       if (!hasFitDriverRoute) {
         const bounds = driverRoute.getBounds();
         if (map.hasLayer(route)) bounds.extend(route.getBounds());
-        map.fitBounds(bounds.pad(0.18), { maxZoom: 15, animate: true });
+        fitBoundsIfFollowing(bounds.pad(0.18), { maxZoom: 15, animate: true });
         hasFitDriverRoute = true;
       }
     } catch (error) {
@@ -678,6 +695,7 @@ export function mapView(cfg) {
 
   function locate() {
     if (locating) return;
+    userAdjustedView = false;
     if (!navigator.geolocation) {
       note.textContent = 'LOCALIZAÇÃO NÃO DISPONÍVEL NESTE APARELHO';
       return;
@@ -738,7 +756,7 @@ export function mapView(cfg) {
       if (map.hasLayer(user)) user.bringToFront();
       const visibleBounds = route.getBounds();
       if (map.hasLayer(driverRoute)) visibleBounds.extend(driverRoute.getBounds());
-      map.fitBounds(visibleBounds.pad(0.2), { maxZoom: 15, animate: true });
+      fitBoundsIfFollowing(visibleBounds.pad(0.2), { maxZoom: 15, animate: true });
 
       const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
       const duration = Math.max(1, Number(data.durationMin) || 1);
@@ -813,7 +831,7 @@ export function mapView(cfg) {
           setDriverMarker(currentDriverPosition);
           note.textContent = 'CALCULANDO ROTA PELAS RUAS...';
           note.classList.remove('map-note-error');
-          map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 17, animate: true });
+          fitBoundsIfFollowing(L.latLngBounds(points).pad(0.2), { maxZoom: 17, animate: true });
           routeTimer = setTimeout(() => {
             loadRoadRoute(pk, ds, key, requestId, controller);
           }, 450);
@@ -821,7 +839,7 @@ export function mapView(cfg) {
       } else {
         cancelRoute();
         const single = pk || ds;
-        if (single) map.setView([single.lat, single.lng], 17, { animate: true });
+        if (single) setViewIfFollowing([single.lat, single.lng], 17, { animate: true });
         note.textContent = 'MOSSORÓ · RN';
         note.classList.remove('map-note-error');
       }
