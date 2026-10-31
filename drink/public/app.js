@@ -147,11 +147,52 @@ function showPayments() {
 function showProfile() {
   const name = h('input', { value: me.name, autocomplete: 'name', maxlength: '60' });
   const phone = h('input', { value: me.phone, type: 'tel', autocomplete: 'tel', inputmode: 'tel', maxlength: '20' });
+  let photo = me.photo || '';
+  const preview = h('div', { style: 'display:flex;justify-content:center;padding:4px 0 8px' });
+  const renderPhoto = () => {
+    const initials = String(name.value || me.name || 'Cliente').trim().split(/\\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+    preview.replaceChildren(photo
+      ? h('img', { src: photo, alt: 'Foto do perfil', style: 'width:92px;height:92px;object-fit:cover;border-radius:50%;border:2px solid var(--lime)' })
+      : h('div', { class: 'avatar', style: 'width:92px;height:92px;font-size:28px' }, initials || 'CL'));
+  };
+  const file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', 'aria-label': 'Escolher foto do perfil', onchange: async () => {
+    const selected = file.files?.[0];
+    if (!selected) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) {
+      toast(root, 'Escolha uma imagem JPG, PNG ou WebP.');
+      file.value = '';
+      return;
+    }
+    if (selected.size > 8 * 1024 * 1024) {
+      toast(root, 'A foto precisa ter no máximo 8 MB.');
+      file.value = '';
+      return;
+    }
+    try {
+      const bitmap = await createImageBitmap(selected);
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close?.();
+      photo = canvas.toDataURL('image/jpeg', 0.82);
+      renderPhoto();
+    } catch {
+      toast(root, 'Não foi possível abrir essa imagem. Tente outra foto.');
+      file.value = '';
+    }
+  } });
+  renderPhoto();
   const close = modal(root, 'Perfil', h('div', { class: 'stack' },
+    preview,
+    h('label', { class: 'field' }, h('span', {}, 'Foto do perfil'), file),
+    photo ? h('button', { class: 'btn ghost', onclick: () => { photo = ''; file.value = ''; renderPhoto(); } }, 'Remover foto') : null,
     h('label', { class: 'field' }, h('span', {}, 'Nome'), name),
     h('label', { class: 'field' }, h('span', {}, 'Telefone (opcional)'), phone),
-    h('p', { class: 'muted small' }, 'Salvos só neste aparelho. Em produção, o cadastro terá verificação de identidade.'),
-    h('button', { class: 'btn', onclick: () => { me = { ...me, name: name.value.trim(), phone: phone.value.trim() }; store.set('me', me); close(); toast(root, 'Perfil salvo'); } }, 'Salvar')));
+    h('p', { class: 'muted small' }, 'A foto e os dados ficam salvos somente neste aparelho, neste protótipo. Ainda não são enviados para um servidor.'),
+    h('button', { class: 'btn', onclick: () => { me = { ...me, name: name.value.trim(), phone: phone.value.trim(), photo }; store.set('me', me); close(); toast(root, 'Perfil salvo'); } }, 'Salvar')));
 }
 
 async function showHistory() {
