@@ -36,7 +36,9 @@ a { color: var(--lime); }
 
 .screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .mapwrap { position: relative; flex: 1 1 200px; min-height: 180px; background: #161616; margin: 0 12px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
-.mapwrap svg { width: 100%; height: 100%; display: block; }
+.leaflet-map { width: 100%; height: 100%; min-height: 180px; background: #161616; }
+.leaflet-container { width: 100%; height: 100%; background: #161616; font-family: var(--font); }
+.leaflet-control-attribution { font-size: 10px !important; }
 .map-note { position: absolute; left: 10px; top: 8px; font-size: 11px; color: var(--muted); background: rgba(16,16,16,.8); padding: 3px 8px; border-radius: 99px; }
 .sheet { background: var(--graphite); border-radius: 28px 28px 0 0; margin-top: -18px; padding: 20px 18px 22px; position: relative; max-height: 66dvh; overflow-y: auto; box-shadow: 0 -12px 30px rgba(0,0,0,.45); }
 .sheet.full { flex: 1; max-height: none; margin-top: 0; border-radius: 0; }
