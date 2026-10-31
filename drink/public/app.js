@@ -140,7 +140,8 @@ async function showHistory() {
     const { rides } = await api('GET', '/api/rides', { headers: { 'x-customer-id': me.id } });
     list.replaceChildren(...(rides.length ? rides.map((r) => h('button', { class: 'list-item', onclick: () => openReceipt(r.id, r.token) },
       h('div', { class: 'row between' }, h('b', {}, `${r.pickup} para ${r.destination}`), h('span', { class: 'pill' }, r.stateLabel)),
-      h('p', { class: 'muted' }, `${dateBR(r.createdAt)} · ${r.code} · ${brl(r.total)}`))) : [h('p', { class: 'muted' }, 'Você ainda não fez nenhuma corrida. Peça seu primeiro motorista na tela inicial.')]));
+      h('p', { class: 'muted' }, `${dateBR(r.createdAt)} · ${r.code} · ${brl(r.total)}`),
+      r.stops?.length ? h('p', { class: 'muted small' }, `Paradas: ${r.stops.join(' · ')}`) : null)) : [h('p', { class: 'muted' }, 'Você ainda não fez nenhuma corrida. Peça seu primeiro motorista na tela inicial.')]));
   } catch (e) { list.replaceChildren(h('div', { class: 'error', role: 'alert' }, e.message)); }
 }
 
@@ -153,6 +154,7 @@ async function openReceipt(id, token) {
       h('div', { class: 'banner' }, r.aviso),
       h('p', {}, h('b', {}, `${r.pickup} para ${r.destination}`)),
       h('p', { class: 'muted' }, `${dateBR(r.createdAt)} · ${r.code} · ${r.stateLabel}`),
+      r.stops?.length ? h('p', { class: 'muted' }, `Paradas: ${r.stops.join(' · ')}`) : null,
       r.driver ? h('p', { class: 'muted' }, `Motorista: ${r.driver.name} (${r.driver.publicId})`) : null,
       h('p', { class: 'muted' }, `Veículo: ${r.vehicle.model} ${r.vehicle.color}, placa ${r.vehicle.plate}`),
       h('table', { class: 'lines' }, h('tbody', {}, r.lines.map((l) => h('tr', {}, h('td', {}, l.label), h('td', {}, brl(l.amount)))), h('tr', { class: 'total' }, h('td', {}, 'Total cobrado'), h('td', {}, brl(r.total))))),
@@ -669,7 +671,7 @@ async function showTracking() {
     if (!ride) return;
     S.ride = ride;
     if (isTerminal(ride)) { stopLive(); return ride.state === 'servico_concluido' ? showFinished() : showCancelled(); }
-    const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.verificationOk, ride.cancelPolicy?.reason]);
+    const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.verificationOk, ride.completedStops, ride.cancelPolicy?.reason]);
     map.update({
       pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition, state: ride.state,
       driverProgress: ride.driverProgress, driverPickupProgress: ride.driverPickupProgress,
@@ -696,7 +698,8 @@ async function showTracking() {
         h('p', {}, 'Seu código de segurança. Só diga ao motorista quando ele chegar e se identificar.')) : null,
       h('div', { class: 'card' }, h('p', {}, h('b', {}, 'Seu carro: '), `${ride.vehicle.model} ${ride.vehicle.color}, ${ride.vehicle.plate}`),
         h('p', { class: 'muted' }, `${ride.pickup.label} para ${ride.destination.label} · ${brl(ride.quote.total)} (demonstração)`),
-        ride.stops?.length ? h('p', { class: 'muted' }, `Paradas: ${ride.stops.map((point) => point.label).join(' · ')}`) : null),
+        ride.stops?.length ? h('p', { class: 'muted' }, `Paradas: ${ride.stops.map((point, index) => `${index < (ride.completedStops || 0) ? '✓' : '○'} ${point.label}`).join(' · ')}`) : null,
+        ride.stops?.length ? h('p', { class: 'muted small' }, `Paradas concluídas: ${ride.completedStops || 0}/${ride.stops.length} · espera estimada de 5 min por parada`) : null),
       ride.shareUrl ? h('button', { class: 'btn ghost', onclick: () => shareTrip(ride) }, 'Copiar link para quem acompanha') : null,
       h('details', {}, h('summary', {}, 'Ver todas as etapas'), h('ol', { class: 'steps' }, FLOW.map((s, i) => h('li', { class: i < idx ? 'done' : i === idx ? 'now' : '' }, cfg.states[s])))),
       ride.state === 'aguardando_confirmacao' ? h('button', { class: 'btn', onclick: async (e) => { busy(e.currentTarget, true); try { paint(await api('POST', `/api/rides/${ride.id}/confirm`, { headers: authH() })); } catch (er) { toast(root, er.message); busy(e.currentTarget, false); } } }, 'Confirmar e procurar motorista') : null,
@@ -779,7 +782,7 @@ function showFinished() {
   } }, 'Enviar avaliação');
   frame(topbar(), h('section', { class: 'sheet full stack', style: 'overflow-y:auto' },
     h('h1', {}, 'Você chegou com seu carro'),
-    h('p', { class: 'muted' }, `${ride.pickup.label} para ${ride.destination.label} · ${ride.code}`),
+    h('p', { class: 'muted' }, `${[ride.pickup.label, ...(ride.stops || []).map((point) => point.label), ride.destination.label].join(' → ')} · ${ride.code}`),
     h('div', { class: 'card' }, h('div', { class: 'price' }, brl(ride.quote.total)), h('p', { class: 'muted' }, `Pago por ${cfg.paymentMethods.find((m) => m.id === ride.paymentMethod)?.label} (simulado)`)),
     ride.rating ? h('div', { class: 'banner' }, `Você avaliou com ${ride.rating.stars} ${ride.rating.stars === 1 ? 'estrela' : 'estrelas'}. Obrigado!`)
       : h('div', { class: 'stack' }, h('h2', {}, `Como foi com ${ride.driver?.name.split(' ')[0] || 'o motorista'}?`), h('div', { class: 'stars' }, starBtns), comment, err, send),
@@ -803,6 +806,7 @@ function showCancelled() {
     h('div', { class: `cancel-result-mark ${free ? 'free' : 'fee'}` }, free ? '✓' : '!'),
     h('h1', {}, 'Solicitação cancelada'),
     h('p', { class: 'muted' }, reasons[ride.cancel?.reason] || (ride.cancel?.by === 'cliente' ? 'Você cancelou esta solicitação.' : 'A solicitação foi encerrada.')),
+    ride.stops?.length ? h('p', { class: 'muted small' }, `Paradas previstas: ${ride.stops.map((point) => point.label).join(' · ')}`) : null,
     h('div', { class: `cancel-summary ${free ? 'free' : 'fee'}` },
       h('span', { class: 'cancel-kicker' }, free ? 'NENHUMA COBRANÇA' : 'TAXA DE CANCELAMENTO'),
       h('strong', { class: 'cancel-value' }, free ? 'R$ 0,00' : brl(fee)),
