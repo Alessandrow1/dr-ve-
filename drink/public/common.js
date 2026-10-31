@@ -523,7 +523,9 @@ export function mapView(cfg) {
       dest.bringToFront();
       showDriverProgress(currentDriverProgress, false);
       if (map.hasLayer(user)) user.bringToFront();
-      map.fitBounds(route.getBounds().pad(0.2), { maxZoom: 16, animate: true });
+      const visibleBounds = route.getBounds();
+      if (map.hasLayer(driverRoute)) visibleBounds.extend(driverRoute.getBounds());
+      map.fitBounds(visibleBounds.pad(0.2), { maxZoom: 15, animate: true });
 
       const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
       const duration = Math.max(1, Number(data.durationMin) || 1);
