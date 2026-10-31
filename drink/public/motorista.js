@@ -84,7 +84,18 @@ function showShell() {
   const body = h('div', { class: 'screen', style: 'min-height:0' });
   const tabs = h('div', { class: 'tabs', role: 'tablist' }, [['painel', 'Painel'], ['ganhos', 'Ganhos'], ['sair', 'Sair']].map(([k, l]) =>
     h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { if (k === 'sair') { driverId = null; store.del('driverId'); return showLogin(); } tab = k; showShell(); } }, l)));
-  root.replaceChildren(demoBar(), header(sw), tabs, body);
+  const initials = String(me.name || 'Motorista').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+  const checks = me.compliance || {};
+  const checkLabel = (value) => value === 'demo' ? 'demo' : value === 'pendente_verificacao' ? 'pendente' : String(value || 'não informado');
+  const profile = h('section', { class: 'driver-profile-card driver-own-profile' },
+    h('div', { class: 'avatar driver-profile-avatar', 'aria-hidden': 'true' }, initials),
+    h('div', { class: 'driver-profile-copy' },
+      h('div', { class: 'row between' }, h('b', {}, me.name), h('span', { class: me.status === 'aprovado' ? 'pill lime' : 'pill' },
+        ({ aprovado: 'Aprovado', em_analise: 'Em análise', reprovado: 'Reprovado', suspenso: 'Suspenso' }[me.status] || me.status))),
+      h('p', { class: 'muted' }, `${me.publicId} · ${me.transport}`),
+      h('p', { class: 'muted small' }, `★ ${Number(me.rating || 0).toFixed(1).replace('.', ',')} · ${me.ridesDone || 0} corridas concluídas`),
+      h('p', { class: 'driver-profile-note' }, `CNH: ${checkLabel(checks.cnh)} · antecedentes: ${checkLabel(checks.antecedentes)} · seguro: ${checkLabel(checks.seguro)}. Verificações reais ainda não estão conectadas.`)));
+  root.replaceChildren(demoBar(), header(sw), profile, tabs, body);
   if (tab === 'ganhos') return showEarnings(body);
   showPanel(body);
 }
