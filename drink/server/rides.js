@@ -54,6 +54,7 @@ const now = () => Date.now();
 const PICKUP_NO_PROGRESS_MS = 3 * 60 * 1000;
 const PICKUP_LATE_GRACE_MS = 5 * 60 * 1000;
 const PICKUP_GPS_FRESH_MS = 25 * 1000;
+const PICKUP_ARRIVAL_RADIUS_KM = 0.12;
 const DRIVER_ISSUE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const DRIVER_REPEAT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const DRIVER_COOLDOWN_MS = 30 * 60 * 1000;
@@ -78,7 +79,8 @@ function pickupCancellationPolicy(ride, at = now()) {
       Number.isFinite(progress.expectedArrivalAt) &&
       at >= progress.expectedArrivalAt + PICKUP_LATE_GRACE_MS;
     const gpsIsFresh = Boolean(driver.posAt) && at - driver.posAt <= PICKUP_GPS_FRESH_MS;
-    const stoppedWithoutProgress = headingToPickup &&
+    const alreadyAtPickup = gpsIsFresh && haversineKm(driver.pos, ride.pickup) <= PICKUP_ARRIVAL_RADIUS_KM;
+    const stoppedWithoutProgress = headingToPickup && !alreadyAtPickup &&
       gpsIsFresh && Number.isFinite(progress.lastProgressAt) &&
       at - progress.lastProgressAt >= PICKUP_NO_PROGRESS_MS;
 
