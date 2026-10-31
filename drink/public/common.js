@@ -105,58 +105,81 @@ export function stream(url, onRide) {
   return () => es.close();
 }
 
-// ---------- mapa esquemático (sem provedor de mapas) ----------
-const NS = 'http://www.w3.org/2000/svg';
-const s = (tag, attrs = {}, ...kids) => {
-  const e = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  for (const c of kids) e.append(c);
-  return e;
-};
-
+// ---------- mapa real com Leaflet + OpenStreetMap ----------
 export function mapView(cfg) {
-  const W = 360, H = 320, b = cfg.mapBounds;
-  const proj = (p) => ({
-    x: Math.max(12, Math.min(W - 12, ((p.lng - b.lngMin) / (b.lngMax - b.lngMin)) * W)),
-    y: Math.max(12, Math.min(H - 12, ((b.latMax - p.lat) / (b.latMax - b.latMin)) * H)),
+  const center = cfg.area?.center || { lat: -5.1875, lng: -37.344 };
+  const mapEl = h('div', {
+    class: 'leaflet-map',
+    role: 'application',
+    'aria-label': 'Mapa de ruas de Mossoró com embarque, destino e motorista',
   });
-  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'xMidYMid slice', role: 'img', 'aria-label': 'Mapa esquemático de Mossoró com embarque, destino e motorista' });
-  svg.append(s('rect', { width: W, height: H, fill: '#171717' }));
-  for (let i = 1; i < 9; i++) {
-    svg.append(s('path', { d: `M${(W / 9) * i} 0V${H}`, stroke: '#242424', 'stroke-width': 1 }));
-    svg.append(s('path', { d: `M0 ${(H / 9) * i}H${W}`, stroke: '#242424', 'stroke-width': 1 }));
+  const el = h('div', { class: 'mapwrap' },
+    mapEl,
+    h('span', { class: 'map-note' }, 'Ruas reais · Mossoró/RN'));
+
+  if (!globalThis.L) {
+    mapEl.textContent = 'Não foi possível carregar o mapa. Verifique sua conexão e atualize a página.';
+    return { el, update() {} };
   }
-  for (const pl of cfg.places) {
-    const p = proj(pl);
-    svg.append(s('circle', { cx: p.x, cy: p.y, r: 2.5, fill: '#4a4a4a' }));
-    const t = s('text', { x: p.x + 5, y: p.y + 3, 'font-size': 7.5, fill: '#767676' });
-    t.textContent = pl.name;
-    svg.append(t);
+
+  const map = L.map(mapEl, {
+    zoomControl: true,
+    attributionControl: true,
+    scrollWheelZoom: false,
+  }).setView([center.lat, center.lng], 13);
+
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+  }).addTo(map);
+
+  const pickup = L.circleMarker([center.lat, center.lng], {
+    radius: 8, color: '#101010', weight: 2, fillColor: '#B8FF5C', fillOpacity: 1,
+  });
+  const dest = L.circleMarker([center.lat, center.lng], {
+    radius: 8, color: '#101010', weight: 2, fillColor: '#FFFFFF', fillOpacity: 1,
+  });
+  const driver = L.circleMarker([center.lat, center.lng], {
+    radius: 7, color: '#101010', weight: 2, fillColor: '#65B8FF', fillOpacity: 1,
+  });
+  const route = L.polyline([], {
+    color: '#8BC443', weight: 5, opacity: 0.9, lineCap: 'round',
+  });
+  let lastRouteKey = '';
+
+  function setMarker(marker, point) {
+    if (!point || !Number.isFinite(Number(point.lat)) || !Number.isFinite(Number(point.lng))) {
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+      return;
+    }
+    if (!map.hasLayer(marker)) marker.addTo(map);
+    marker.setLatLng([Number(point.lat), Number(point.lng)]);
   }
-  const route = s('path', { d: '', fill: 'none', stroke: '#B8FF5C', 'stroke-width': 3, 'stroke-dasharray': '2 7', 'stroke-linecap': 'round', opacity: 0.8 });
-  const pickup = s('g', { visibility: 'hidden' }, s('circle', { r: 11, fill: 'rgba(184,255,92,.25)' }), s('circle', { r: 6, fill: '#101010', stroke: '#B8FF5C', 'stroke-width': 3 }));
-  const dest = s('g', { visibility: 'hidden' }, s('rect', { x: -7, y: -7, width: 14, height: 14, rx: 3, fill: '#fff', stroke: '#101010', 'stroke-width': 2 }));
-  const driver = s('g', { visibility: 'hidden', style: 'transition: transform 2.4s linear' },
-    s('circle', { r: 13, fill: 'rgba(184,255,92,.3)' }), s('circle', { r: 8, fill: '#B8FF5C', stroke: '#101010', 'stroke-width': 2.5 }));
-  svg.append(route, pickup, dest, driver);
-  const place = (g, p) => {
-    if (!p) return g.setAttribute('visibility', 'hidden');
-    const q = proj(p);
-    g.setAttribute('transform', `translate(${q.x} ${q.y})`);
-    g.style.transform = `translate(${q.x}px, ${q.y}px)`;
-    g.setAttribute('visibility', 'visible');
-  };
-  const el = h('div', { class: 'mapwrap' }, svg, h('span', { class: 'map-note' }, 'Mapa esquemático de demonstração'));
+
+  // O primeiro mapa pode ser criado antes de entrar no DOM; recalculamos o tamanho após a renderização.
+  requestAnimationFrame(() => map.invalidateSize());
+
   return {
     el,
     update({ pickup: pk, dest: ds, driver: dr }) {
-      place(pickup, pk);
-      place(dest, ds);
-      place(driver, dr);
+      setMarker(pickup, pk);
+      setMarker(dest, ds);
+      setMarker(driver, dr);
+
       if (pk && ds) {
-        const a = proj(pk), c = proj(ds);
-        route.setAttribute('d', `M${a.x} ${a.y}L${c.x} ${c.y}`);
-      } else route.setAttribute('d', '');
+        const points = [[Number(pk.lat), Number(pk.lng)], [Number(ds.lat), Number(ds.lng)]];
+        route.setLatLngs(points);
+        if (!map.hasLayer(route)) route.addTo(map);
+
+        const key = points.map((p) => p.map((v) => v.toFixed(5)).join(',')).join('|');
+        if (key !== lastRouteKey) {
+          map.fitBounds(route.getBounds().pad(0.18), { maxZoom: 15, animate: false });
+          lastRouteKey = key;
+        }
+      } else {
+        if (map.hasLayer(route)) map.removeLayer(route);
+        lastRouteKey = '';
+      }
     },
   };
 }
