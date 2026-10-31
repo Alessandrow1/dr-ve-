@@ -78,7 +78,7 @@ const geocodeCache = new Map();
 // ---- rotas ----
 const routes = [];
 const route = (method, pattern, handler) =>
-  routes.push({ method, re: new RegExp('^' + pattern.replace(/:(\\w+)/g, '(?<$1>[^/]+)') + '$'), handler });
+  routes.push({ method, re: new RegExp('^' + pattern.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), handler });
 
 // Geocodificação no servidor para evitar bloqueios de CORS no navegador.
 route('GET', '/api/geocode', async (req) => {
