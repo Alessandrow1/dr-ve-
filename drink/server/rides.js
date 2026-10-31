@@ -423,7 +423,6 @@ export async function cancelRide(id, who, { token, driverId, reason, fee: forced
     ? cancelPolicy.reason
     : null;
   const fee = forcedFee ?? (who === 'cliente' ? cancelPolicy.fee : 0);
-  const driverPenalty = policyReason ? registerDriverPickupIssue(ride, policyReason) : null;
   const prov = getProvider();
   if (ride.payment?.status === 'autorizado') {
     if (fee > 0) {
@@ -436,6 +435,7 @@ export async function cancelRide(id, who, { token, driverId, reason, fee: forced
       ride.payment = { ...ride.payment, status: 'cancelado', charged: 0 };
     }
   }
+  const driverPenalty = policyReason ? registerDriverPickupIssue(ride, policyReason) : null;
   ride.cancel = {
     by: who,
     reason: reason || policyReason || 'cancelado_pelo_cliente',
@@ -606,7 +606,7 @@ export function updateLocation(driverId, pos) {
 
   const ride = driverActiveRide(driverId);
   if (ride?.state === 'motorista_a_caminho' && ride.pickupProgress) {
-    const distanceKm = roadKm(d.pos, ride.pickup);
+    const distanceKm = haversineKm(d.pos, ride.pickup);
     const accuracyKm = Math.max(0, Math.min(0.15, ((d.posAccuracy || 25) + 25) / 1000));
     const movementThresholdKm = Math.max(0.05, accuracyKm);
     if (distanceKm <= ride.pickupProgress.closestDistanceKm - movementThresholdKm) {
@@ -662,12 +662,13 @@ export function departRide(id, driverId) {
   const d = requireDriver(driverId);
   const startedAt = now();
   const distanceKm = roadKm(d.pos, ride.pickup);
+  const progressDistanceKm = haversineKm(d.pos, ride.pickup);
   const etaMin = Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60));
   ride.pickupProgress = {
     startedAt,
     expectedArrivalAt: startedAt + etaMin * 60 * 1000,
     lastProgressAt: startedAt,
-    closestDistanceKm: distanceKm,
+    closestDistanceKm: progressDistanceKm,
   };
   go(ride, 'motorista_a_caminho', 'motorista', 'iniciar_deslocamento', { etaOriginalMin: etaMin });
   return ride;
