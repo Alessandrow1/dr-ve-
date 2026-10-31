@@ -171,7 +171,7 @@ function paintActive(view, ride) {
   if (view.dataset.key === key) {
     if (view.pickupMap) {
       view.pickupMap.update({
-        pickup: ride.pickup, dest: ride.destination,
+        pickup: ride.pickup, dest: ride.destination, state: ride.state,
         driver: ride.driverPosition, driverProgress: ride.driverProgress,
         driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
       });
@@ -194,7 +194,7 @@ function paintActive(view, ride) {
   if (headingToPickup) {
     if (!view.pickupMap) view.pickupMap = mapView(cfg);
     view.pickupMap.update({
-      pickup: ride.pickup, dest: ride.destination,
+      pickup: ride.pickup, dest: ride.destination, state: ride.state,
       driver: ride.driverPosition, driverProgress: ride.driverProgress,
       driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
     });
