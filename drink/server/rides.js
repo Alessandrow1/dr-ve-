@@ -211,14 +211,26 @@ function positionInfo(ride) {
   const start = ride.driverStart || d.pos;
   switch (ride.state) {
     case 'motorista_encontrado':
-      return { pos: start, etaMin: ride.pickupProgress?.etaOriginalMin ?? q.etaMin };
+      return {
+        pos: fresh ? d.pos : start,
+        etaMin: ride.pickupProgress?.etaOriginalMin ?? q.etaMin,
+        gpsFresh: d.isBot ? null : Boolean(fresh),
+      };
     case 'motorista_a_caminho': {
-      if (fresh) {
-        const km = roadKm(d.pos, ride.pickup);
-        return { pos: d.pos, etaMin: Math.max(1, Math.ceil((km / tariff().avgBikeKmh) * 60)) };
+      if (!d.isBot) {
+        if (fresh) {
+          const km = roadKm(d.pos, ride.pickup);
+          return { pos: d.pos, etaMin: Math.max(1, Math.ceil((km / tariff().avgBikeKmh) * 60)), gpsFresh: true };
+        }
+        // Para motorista humano, GPS antigo fica parado na última posição: não simulamos deslocamento.
+        return { pos: d.pos || start, etaMin: null, gpsFresh: false };
       }
       const t = elapsed / T;
-      return { pos: lerp(start, ride.pickup, t), etaMin: Math.max(1, Math.ceil(q.etaMin * (1 - Math.min(1, t)))) };
+      return {
+        pos: lerp(start, ride.pickup, t),
+        etaMin: Math.max(1, Math.ceil(q.etaMin * (1 - Math.min(1, t)))),
+        gpsFresh: null,
+      };
     }
     case 'motorista_chegou':
     case 'verificacao_pre_servico':
@@ -248,7 +260,7 @@ const pt = (p) => ({ label: p.label, lat: p.lat, lng: p.lng });
 
 export function view(ride, role) {
   const d = ride.driverId ? db.drivers[ride.driverId] : null;
-  const { pos, etaMin, progress } = positionInfo(ride);
+  const { pos, etaMin, progress, gpsFresh } = positionInfo(ride);
   const base = {
     id: ride.id,
     code: ride.code,
@@ -263,6 +275,7 @@ export function view(ride, role) {
     driverPosition: pos,
     driverProgress: Number.isFinite(progress) ? progress : null,
     etaMin,
+    driverGpsFresh: gpsFresh ?? null,
     cancel: ride.cancel || null,
     demo: true,
     simulatedDriver: !!d?.isBot,
@@ -278,6 +291,7 @@ export function view(ride, role) {
       driverPosition: base.driverPosition,
       driverProgress: base.driverProgress,
       etaMin: base.etaMin,
+      driverGpsFresh: base.driverGpsFresh,
       driverFirstName: d ? d.name.split(' ')[0] : null,
       customerFirstName: ride.customer.name.split(' ')[0],
       vehicle: { model: ride.vehicle.model, color: ride.vehicle.color },
