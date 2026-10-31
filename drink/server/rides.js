@@ -259,10 +259,21 @@ function positionInfo(ride) {
       return { pos: { lat: ride.pickup.lat, lng: ride.pickup.lng }, etaMin: 0 };
     case 'em_andamento': {
       if (fresh) {
-        const km = roadKm(d.pos, ride.destination);
-        return { pos: d.pos, etaMin: Math.max(1, Math.ceil((km / tariff().avgCarKmh) * 60)), progress: null };
+        const remainingStops = (ride.stops || []).slice(ride.completedStops || 0);
+        const waypoints = [...remainingStops, ride.destination];
+        const remainingKm = waypoints.reduce((sum, point, index) => {
+          const from = index === 0 ? d.pos : waypoints[index - 1];
+          return sum + roadKm(from, point);
+        }, 0);
+        const stopWaitMin = remainingStops.length * 5;
+        return {
+          pos: d.pos,
+          etaMin: Math.max(1, Math.ceil((remainingKm / tariff().avgCarKmh) * 60) + stopWaitMin),
+          progress: null,
+        };
       }
-      const t = Math.max(0, Math.min(1, elapsed / T));
+      const tripDurationMs = T + (Number(ride.quote.stopWaitMin) || 0) * 60 * 1000 * Number(process.env.DEMO_SPEED || 1);
+      const t = Math.max(0, Math.min(1, elapsed / tripDurationMs));
       return {
         pos: routePointAtProgress(ride, t),
         etaMin: Math.max(1, Math.ceil(q.durationMin * (1 - t))),
