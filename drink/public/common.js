@@ -58,7 +58,10 @@ export function setTheme(theme) {
 }
 
 // Aplica a preferência salva antes de montar as telas.
-document.documentElement.dataset.theme = getTheme();
+const initialTheme = getTheme();
+document.documentElement.dataset.theme = initialTheme;
+const initialThemeColor = document.querySelector('meta[name="theme-color"]');
+if (initialThemeColor) initialThemeColor.setAttribute('content', initialTheme === 'light' ? '#ffffff' : '#101010');
 
 export async function api(method, url, { body, headers } = {}) {
   let res;
