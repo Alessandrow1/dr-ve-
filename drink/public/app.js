@@ -451,8 +451,9 @@ function showHome() {
         refresh();
       },
     }, 'Remover');
+    entry.title = h('b', {}, `Parada ${stopFields.length + 1}`);
     entry.element = h('div', { class: 'stack stop-field' },
-      h('div', { class: 'row between' }, h('b', {}, `Parada ${stopFields.length + 1}`), remove),
+      h('div', { class: 'row between' }, entry.title, remove),
       h('label', { class: 'field address-field' },
         h('span', {}, 'Endereço da parada'),
         h('span', { class: 'address-input-wrap' },
@@ -470,6 +471,7 @@ function showHome() {
   }
 
   function renderStopFields() {
+    stopFields.forEach((entry, index) => { entry.title.textContent = `Parada ${index + 1}`; });
     stopFieldsContainer.replaceChildren(...stopFields.map((entry) => entry.element));
     addStopBtn.disabled = stopFields.length >= 2;
     addStopBtn.textContent = stopFields.length >= 2 ? 'Máximo de 2 paradas' : '+ Adicionar parada';
