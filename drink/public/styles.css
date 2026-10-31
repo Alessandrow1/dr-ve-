@@ -382,7 +382,7 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
   width: 28px;
   height: 0;
   flex: none;
-  border-top: 4px dashed #65B8FF;
+  border-top: 4px solid #FFFFFF;
 }
 .pickup-navigation { gap: 10px; }
 .pickup-navigation .mapwrap { min-height: 250px; height: 34dvh; max-height: 360px; border-radius: 20px; overflow: hidden; }
