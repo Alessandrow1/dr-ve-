@@ -824,6 +824,7 @@ export function mapView(cfg) {
       route.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
       if (!map.hasLayer(route)) route.addTo(map);
       pickup.bringToFront();
+      stopMarkers.forEach((marker) => marker.bringToFront());
       dest.bringToFront();
       showDriverProgress(currentDriverProgress, false);
       if (map.hasLayer(user)) user.bringToFront();
@@ -860,11 +861,11 @@ export function mapView(cfg) {
     el,
     update({ pickup: pk, dest: ds, stops = [], driver: dr, state, driverProgress: progress, driverPickupProgress: pickupProgress, driverRouteStart }) {
       const via = Array.isArray(stops) ? stops.filter((point) => point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng))) : [];
-      updateStopMarkers(via);
       const approachingPickup = ['motorista_encontrado', 'motorista_a_caminho'].includes(state);
       const showingCustomerTrip = ['servico_iniciado', 'em_andamento'].includes(state);
       // Sem state é o mapa de prévia da cotação: mantém a rota verde.
       const showCustomerRoute = state == null || showingCustomerTrip;
+      updateStopMarkers(showCustomerRoute ? via : []);
       currentDriverPosition = dr || null;
       currentPickupPoint = pk || null;
       currentDriverRouteStart = driverRouteStart || null;
