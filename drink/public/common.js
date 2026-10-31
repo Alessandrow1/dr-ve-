@@ -384,6 +384,8 @@ export function mapView(cfg) {
       }
     } catch (error) {
       if (error.name === 'AbortError' || requestId !== driverRouteRequestId) return;
+      // Permite tentar novamente no próximo sinal de GPS após uma falha transitória.
+      lastDriverRouteOrigin = null;
       console.warn('[map] falha ao calcular rota de bicicleta:', error);
       routeLegend.hidden = false;
       routeLegendLabel.textContent = 'Rota de bicicleta temporariamente indisponível';
