@@ -573,6 +573,9 @@ async function showTracking() {
       ride.etaMin ? h('span', { class: 'pill lime', style: 'align-self:flex-start;width:fit-content' }, ride.state === 'em_andamento' ? `Chegada em ~${ride.etaMin} min` : `Chega em ~${ride.etaMin} min`) : null,
       h('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.max(0, Math.round(((idx + 1) / FLOW.length) * 100))) }, h('i', { style: `width:${Math.max(4, ((idx + 1) / FLOW.length) * 100)}%` })),
       ride.cancelPolicy?.reason ? h('div', { class: 'banner' }, ride.cancelPolicy.reason === 'motorista_sem_progresso' ? 'Você pode cancelar sem custo: o GPS não registrou avanço do motorista por 3 minutos.' : 'Você pode cancelar sem custo: a previsão original de chegada foi ultrapassada em pelo menos 5 minutos.') : null,
+      ride.driverGpsFresh === false && ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state)
+        ? h('div', { class: 'banner' }, 'A localização do motorista parou de atualizar. O mapa mantém a última posição recebida até o GPS voltar.')
+        : null,
       d ? h('div', { class: 'card row' },
         h('div', { class: 'avatar', 'aria-hidden': 'true' }, d.name.split(' ').map((x) => x[0]).slice(0, 2).join('')),
         h('div', { style: 'flex:1' }, h('b', {}, d.name), h('p', { class: 'muted' }, `${d.transport} · ID ${d.publicId}`),
