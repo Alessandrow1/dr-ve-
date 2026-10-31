@@ -228,9 +228,9 @@ function positionInfo(ride) {
       }
       const progress = Math.max(0, Math.min(1, elapsed / T));
       return {
-        // A posição em linha reta fica apenas como fallback; o cliente posiciona o marcador
-        // na rota viária usando pickupProgress.
-        pos: lerp(start, ride.pickup, progress),
+        // A simulação não envia posição interpolada em linha reta.
+        // O mapa só posiciona o marcador quando recebe a geometria viária da rota de bicicleta.
+        pos: null,
         etaMin: Math.max(1, Math.ceil(q.etaMin * (1 - progress))),
         pickupProgress: progress,
         gpsFresh: null,
