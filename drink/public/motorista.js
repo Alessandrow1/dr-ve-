@@ -6,13 +6,15 @@ let cfg;
 let driverId = store.get('driverId', null);
 let me = null;
 let tab = 'painel';
-let live = { stop: null, poll: null, geo: null, lastSent: 0 };
+let live = { stop: null, poll: null, geo: null, lastSent: 0, locationHeartbeat: null, lastPosition: null };
 const H = () => ({ 'x-driver-id': driverId });
 
 function stopLive() {
   live.stop?.(); live.stop = null;
   clearInterval(live.poll); live.poll = null;
   if (live.geo != null) navigator.geolocation?.clearWatch(live.geo);
+  clearInterval(live.locationHeartbeat); live.locationHeartbeat = null;
+  live.lastPosition = null;
   live.geo = null;
 }
 const busy = (b, on) => { b.classList.toggle('busy', on); b.disabled = on; };
@@ -98,19 +100,28 @@ function currentPos() {
   return new Promise((res) => {
     if (!navigator.geolocation) return res(undefined);
     navigator.geolocation.getCurrentPosition((p) => {
-      const pt = { lat: p.coords.latitude, lng: p.coords.longitude };
+      const pt = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
       res(haversineKm(cfg.area.center, pt) <= cfg.area.radiusKm ? pt : undefined);
     }, () => res(undefined), { timeout: 4000 });
   });
 }
+function sendDriverLocation(pt) {
+  if (!pt || Date.now() - live.lastSent < 6000) return;
+  live.lastSent = Date.now();
+  api('POST', '/api/driver/location', { headers: H(), body: pt }).catch(() => {});
+}
 function startGeo() {
   if (!navigator.geolocation || live.geo != null) return;
   live.geo = navigator.geolocation.watchPosition((p) => {
-    const pt = { lat: p.coords.latitude, lng: p.coords.longitude };
-    if (haversineKm(cfg.area.center, pt) > cfg.area.radiusKm || Date.now() - live.lastSent < 6000) return;
-    live.lastSent = Date.now();
-    api('POST', '/api/driver/location', { headers: H(), body: pt }).catch(() => {});
+    const pt = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
+    if (haversineKm(cfg.area.center, pt) > cfg.area.radiusKm) return;
+    live.lastPosition = pt;
+    sendDriverLocation(pt);
   }, () => {}, { enableHighAccuracy: true, maximumAge: 5000 });
+  // Reenvia a última posição como sinal de vida mesmo quando o ciclista está parado.
+  live.locationHeartbeat = setInterval(() => {
+    if (live.lastPosition) sendDriverLocation(live.lastPosition);
+  }, 6000);
 }
 
 // ---------- painel ----------
@@ -177,6 +188,9 @@ function paintActive(view, ride) {
   else if (steps[ride.state]) {
     const [label, action, hint] = steps[ride.state];
     out.push(h('p', { class: 'muted' }, hint));
+    if (ride.state === 'motorista_a_caminho') {
+      out.push(h('div', { class: 'banner' }, 'Mantenha o GPS ativo e siga até o embarque. Sem avanço detectável por 3 minutos ou com atraso superior a 5 minutos da previsão, o cliente poderá cancelar sem custo. Ocorrências e emergências podem ser informadas pelo suporte.'));
+    }
     out.push(h('button', { class: 'btn', onclick: async (e) => { busy(e.currentTarget, true); await act(`/api/driver/rides/${ride.id}/${action}`); } }, label));
     if (['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state)) out.push(h('button', { class: 'btn warn', onclick: async () => { if (confirm('Liberar esta solicitação para outro motorista?')) await act(`/api/driver/rides/${ride.id}/release`); } }, 'Liberar solicitação'));
   }
