@@ -48,7 +48,7 @@ a { color: var(--lime); }
 .map-recenter { position: absolute; z-index: 650; right: 14px; bottom: 24px; width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid rgba(184,255,92,.65); border-radius: 15px; background: #151d17; color: var(--lime); box-shadow: 0 4px 18px rgba(0,0,0,.45); cursor: pointer; }
 .map-recenter:hover { background: #263329; }
 .map-recenter:disabled { opacity: .55; cursor: wait; }
-.map-recenter svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.map-recenter span { font-size: 29px; line-height: 1; font-weight: 500; transform: translateY(-1px); }
 .sheet { background: var(--graphite); border-radius: 28px 28px 0 0; margin-top: -18px; padding: 20px 18px 22px; position: relative; max-height: 66dvh; overflow-y: auto; box-shadow: 0 -12px 30px rgba(0,0,0,.45); }
 .sheet.full { flex: 1; max-height: none; margin-top: 0; border-radius: 0; }
 .sheet h1 { font-size: 24px; letter-spacing: -0.03em; line-height: 1.15; }
