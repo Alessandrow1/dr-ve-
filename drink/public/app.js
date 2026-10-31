@@ -112,6 +112,29 @@ function showSupport() {
     h('button', { class: 'btn ghost', disabled: true }, 'Falar com atendente (indisponível no protótipo)')));
 }
 
+function reportRide(id, token) {
+  const kind = h('select', {}, [['emergencia', 'Emergência'], ['acidente', 'Acidente'], ['avaria', 'Avaria no veículo'], ['conduta', 'Conduta do motorista'], ['cobranca', 'Cobrança'], ['outro', 'Outro']].map(([v, l]) => h('option', { value: v }, l)));
+  const description = h('textarea', { maxlength: '1000', placeholder: 'Conte o que aconteceu nesta corrida.' });
+  const err = h('div', { class: 'error', role: 'alert' });
+  const send = h('button', { class: 'btn', onclick: async () => {
+    err.textContent = '';
+    if (description.value.trim().length < 5) { err.textContent = 'Descreva o problema em pelo menos cinco caracteres.'; return; }
+    busy(send, true);
+    try {
+      await api('POST', `/api/rides/${id}/incident`, { headers: { 'x-ride-token': token }, body: { kind: kind.value, text: description.value.trim() } });
+      close();
+      toast(root, 'Relato registrado. A equipe poderá analisar esta ocorrência.');
+    } catch (e) { err.textContent = e.message; busy(send, false); }
+  } }, 'Enviar relato');
+  const close = modal(root, 'Relatar problema', h('div', { class: 'stack' },
+    h('p', { class: 'muted' }, 'Este relato ficará associado à corrida selecionada. Em risco imediato, ligue para os serviços de emergência.'),
+    h('div', { class: 'grid2' },
+      h('a', { class: 'btn warn', href: 'tel:190', style: 'display:grid;place-items:center;text-decoration:none' }, 'Polícia 190'),
+      h('a', { class: 'btn warn', href: 'tel:192', style: 'display:grid;place-items:center;text-decoration:none' }, 'SAMU 192')),
+    h('label', { class: 'field' }, h('span', {}, 'Tipo de ocorrência'), kind),
+    h('label', { class: 'field' }, h('span', {}, 'Descrição'), description), err, send));
+}
+
 function showPayments() {
   const group = h('div', { class: 'radio-group', role: 'radiogroup', 'aria-label': 'Forma de pagamento padrão' },
     cfg.paymentMethods.map((m) => h('label', { class: 'check' },
@@ -147,7 +170,7 @@ async function showHistory() {
 
 async function openReceipt(id, token) {
   const box = h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Carregando…'));
-  modal(root, 'Recibo', box);
+  const closeReceipt = modal(root, 'Recibo', box);
   try {
     const r = await api('GET', `/api/rides/${id}/receipt`, { headers: { 'x-ride-token': token } });
     fill(box,
@@ -159,6 +182,7 @@ async function openReceipt(id, token) {
       h('p', { class: 'muted' }, `Veículo: ${r.vehicle.model} ${r.vehicle.color}, placa ${r.vehicle.plate}`),
       h('table', { class: 'lines' }, h('tbody', {}, r.lines.map((l) => h('tr', {}, h('td', {}, l.label), h('td', {}, brl(l.amount)))), h('tr', { class: 'total' }, h('td', {}, 'Total cobrado'), h('td', {}, brl(r.total))))),
       h('p', { class: 'muted small' }, `Pagamento: ${cfg.paymentMethods.find((m) => m.id === r.paymentMethod)?.label} (simulado) · Tabela de preços ${r.tariffVersion} · Comissão da plataforma ${r.commissionPct}%`),
+      h('button', { class: 'btn ghost', onclick: () => { closeReceipt(); reportRide(id, token); } }, 'Relatar problema com esta corrida'),
       h('button', { class: 'btn ghost no-print', onclick: () => window.print() }, 'Imprimir ou salvar em PDF'));
   } catch (e) { box.replaceChildren(h('div', { class: 'error', role: 'alert' }, e.message)); }
 }
@@ -517,7 +541,12 @@ function showHome() {
         q.stopsCount ? h('p', { class: 'muted small' }, `${q.stopsCount} ${q.stopsCount === 1 ? 'parada' : 'paradas'} · inclui ${q.stopWaitMin} min de espera estimada`) : null),
       h('div', { style: 'text-align:right' },
         h('span', { class: 'pill lime' }, 'Chega em ~' + q.etaMin + ' min'),
-        q.etaEstimated ? h('p', { class: 'muted small' }, 'tempo estimado') : null)));
+        q.etaEstimated ? h('p', { class: 'muted small' }, 'tempo estimado') : null),
+      h('details', { class: 'quote-breakdown' },
+        h('summary', {}, 'Ver detalhamento do preço'),
+        h('table', { class: 'lines' }, h('tbody', {},
+          q.lines.map((line) => h('tr', {}, h('td', {}, line.label), h('td', {}, brl(line.amount)))),
+          h('tr', { class: 'total' }, h('td', {}, 'Total estimado'), h('td', {}, brl(q.total)))))));
   }
 
   async function refresh() {
@@ -691,10 +720,13 @@ async function showTracking() {
       ride.driverGpsFresh === false && ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state)
         ? h('div', { class: 'banner' }, 'A localização do motorista parou de atualizar. O mapa mantém a última posição recebida até o GPS voltar.')
         : null,
-      d ? h('div', { class: 'card row' },
-        h('div', { class: 'avatar', 'aria-hidden': 'true' }, d.name.split(' ').map((x) => x[0]).slice(0, 2).join('')),
-        h('div', { style: 'flex:1' }, h('b', {}, d.name), h('p', { class: 'muted' }, `${d.transport} · ID ${d.publicId}`),
-          h('p', { class: 'muted' }, `Nota ${d.rating.toFixed(1).replace('.', ',')}${d.ratingsCount ? ` (${d.ratingsCount})` : ''} · ${ride.simulatedDriver ? 'Motorista simulado' : 'Verificação de demonstração'}`))) : null,
+      d ? h('div', { class: 'card driver-profile-card' },
+        h('div', { class: 'avatar driver-profile-avatar', 'aria-hidden': 'true' }, d.name.split(' ').map((x) => x[0]).slice(0, 2).join('')),
+        h('div', { class: 'driver-profile-copy' },
+          h('div', { class: 'row between' }, h('b', {}, d.name), h('span', { class: 'pill lime' }, `★ ${d.rating.toFixed(1).replace('.', ',')}`)),
+          h('p', { class: 'muted' }, `${d.transport} · ID ${d.publicId}`),
+          h('p', { class: 'muted small' }, `${d.ratingsCount || 0} avaliações recebidas · ${ride.simulatedDriver ? 'Motorista simulado' : 'Perfil demonstrativo'}`),
+          h('p', { class: 'driver-profile-note' }, 'As verificações de identidade, habilitação e seguro ainda dependem de integração externa.'))) : null,
       ride.pin ? h('div', { class: 'keycode', role: 'group', 'aria-label': `Código de segurança ${ride.pin.split('').join(' ')}` },
         svgNode(KEY_ICON), h('div', { class: 'digits' }, ride.pin.split('').map((c) => h('b', {}, c))),
         h('p', {}, 'Seu código de segurança. Só diga ao motorista quando ele chegar e se identificar.')) : null,
