@@ -24,7 +24,7 @@ async function boot() {
     eta.hidden = !r.etaMin; eta.textContent = `~${r.etaMin} min`;
     gpsWarning.hidden = r.driverGpsFresh !== false;
     map.update({
-      pickup: r.pickup, dest: r.destination, driver: r.driverPosition,
+      pickup: r.pickup, dest: r.destination, driver: r.driverPosition, state: r.state,
       driverProgress: r.driverProgress, driverPickupProgress: r.driverPickupProgress,
       driverRouteStart: r.driverRouteStart,
     });
