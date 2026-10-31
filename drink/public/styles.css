@@ -225,7 +225,7 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
   --ink: #ffffff;
   --graphite: #ffffff;
   --graphite-2: #f1f4f1;
-  --line: #dce4dc;
+  --line: #bec7be;
   --lime: #7da83e;
   --lime-dim: #668d32;
   --white: #1e281f;
@@ -249,7 +249,7 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
 :root[data-theme="light"] #app { background: #ffffff; border-color: #dce4dc; box-shadow: 0 12px 40px rgba(22, 42, 24, .08); }
 :root[data-theme="light"] .demo-bar { background: #a5d66c; color: #172116; }
 :root[data-theme="light"] .demo-bar button { color: #172116; }
-:root[data-theme="light"] .icon-btn { background: #f4f7f4; }
+:root[data-theme="light"] .icon-btn { background: #f4f7f4; border-color: #aeb8ae; }
 :root[data-theme="light"] .mapwrap { background: #f3f6f3; border-color: #e0e7e0; box-shadow: 0 8px 24px rgba(22, 42, 24, .10); }
 :root[data-theme="light"] .leaflet-map,
 :root[data-theme="light"] .leaflet-container { background: #f3f6f3; }
