@@ -214,21 +214,25 @@ function positionInfo(ride) {
       return {
         pos: fresh ? d.pos : start,
         etaMin: ride.pickupProgress?.etaOriginalMin ?? q.etaMin,
+        pickupProgress: d.isBot ? 0 : null,
         gpsFresh: d.isBot ? null : Boolean(fresh),
       };
     case 'motorista_a_caminho': {
       if (!d.isBot) {
         if (fresh) {
           const km = roadKm(d.pos, ride.pickup);
-          return { pos: d.pos, etaMin: Math.max(1, Math.ceil((km / tariff().avgBikeKmh) * 60)), gpsFresh: true };
+          return { pos: d.pos, etaMin: Math.max(1, Math.ceil((km / tariff().avgBikeKmh) * 60)), pickupProgress: null, gpsFresh: true };
         }
         // Para motorista humano, GPS antigo fica parado na última posição: não simulamos deslocamento.
-        return { pos: d.pos || start, etaMin: null, gpsFresh: false };
+        return { pos: d.pos || start, etaMin: null, pickupProgress: null, gpsFresh: false };
       }
-      const t = elapsed / T;
+      const progress = Math.max(0, Math.min(1, elapsed / T));
       return {
-        pos: lerp(start, ride.pickup, t),
-        etaMin: Math.max(1, Math.ceil(q.etaMin * (1 - Math.min(1, t)))),
+        // A posição em linha reta fica apenas como fallback; o cliente posiciona o marcador
+        // na rota viária usando pickupProgress.
+        pos: lerp(start, ride.pickup, progress),
+        etaMin: Math.max(1, Math.ceil(q.etaMin * (1 - progress))),
+        pickupProgress: progress,
         gpsFresh: null,
       };
     }
@@ -260,7 +264,7 @@ const pt = (p) => ({ label: p.label, lat: p.lat, lng: p.lng });
 
 export function view(ride, role) {
   const d = ride.driverId ? db.drivers[ride.driverId] : null;
-  const { pos, etaMin, progress, gpsFresh } = positionInfo(ride);
+  const { pos, etaMin, progress, pickupProgress, gpsFresh } = positionInfo(ride);
   const base = {
     id: ride.id,
     code: ride.code,
@@ -274,6 +278,8 @@ export function view(ride, role) {
     timeline: ride.timeline,
     driverPosition: pos,
     driverProgress: Number.isFinite(progress) ? progress : null,
+    driverPickupProgress: Number.isFinite(pickupProgress) ? pickupProgress : null,
+    driverRouteStart: d?.isBot ? (ride.driverRouteStart || ride.driverStart || null) : null,
     etaMin,
     driverGpsFresh: gpsFresh ?? null,
     cancel: ride.cancel || null,
@@ -290,6 +296,8 @@ export function view(ride, role) {
       destination: base.destination,
       driverPosition: base.driverPosition,
       driverProgress: base.driverProgress,
+      driverPickupProgress: base.driverPickupProgress,
+      driverRouteStart: base.driverRouteStart,
       etaMin: base.etaMin,
       driverGpsFresh: base.driverGpsFresh,
       driverFirstName: d ? d.name.split(' ')[0] : null,
@@ -682,6 +690,7 @@ export function acceptRide(id, driverId) {
   if (driverActiveRide(driverId)) throw new HttpError(409, 'Você já tem um atendimento em andamento.');
   ride.driverId = driverId;
   ride.driverStart = { ...d.pos };
+  ride.driverRouteStart = { ...d.pos };
   const acceptedAt = now();
   const distanceKm = roadKm(d.pos, ride.pickup);
   const etaMin = Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60));
