@@ -7,6 +7,8 @@ process.env.ADMIN_KEY = 'chave-de-teste';
 
 const { createApp } = await import('../server/index.js');
 const store = await import('../server/store.js');
+const R = await import('../server/rides.js');
+const { resumeBot } = await import('../server/dispatch.js');
 const { resetForTests } = store;
 
 let server, base;
@@ -421,3 +423,34 @@ test('cliente cancela sem custo por falta de avanço ou atraso, com penalidade p
   assert.equal(store.db.drivers.d_rafael.online, false);
 });
 
+
+
+test('motorista simulado retoma e conclui uma corrida interrompida após reiniciar o servidor', async () => {
+  resetForTests();
+  const created = await call('POST', '/api/rides', { body: rideBody({ demoAuto: false }) });
+  const id = created.data.ride.id;
+  const token = created.data.token;
+  const H = { 'x-ride-token': token };
+
+  await call('POST', `/api/rides/${id}/confirm`, { headers: H });
+  R.acceptRide(id, 'd_bot');
+  R.departRide(id, 'd_bot');
+  R.arriveRide(id, 'd_bot');
+  R.beginVerification(id, 'd_bot');
+  const ride = R.getClientRide(id, token);
+  await R.submitVerification(id, 'd_bot', {
+    checks,
+    equipmentPlan: 'porta_malas',
+    notes: 'Verificação simulada para teste.',
+    pin: ride.pin,
+  });
+  R.startService(id, 'd_bot');
+  R.driveRide(id, 'd_bot');
+
+  const interrupted = await call('GET', `/api/rides/${id}`, { headers: H });
+  assert.equal(interrupted.data.state, 'em_andamento');
+
+  resumeBot(id);
+  const finished = await until(id, token, 'servico_concluido', 10000);
+  assert.equal(finished.payment.status, 'pago');
+});
