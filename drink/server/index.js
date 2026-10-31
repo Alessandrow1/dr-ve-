@@ -27,7 +27,7 @@ const PENDING = [
   'Verificação de CNH junto ao órgão de trânsito e consulta de antecedentes (provedor externo)',
   'Verificação de seguro/responsabilidade civil compatível com o serviço',
   'Provedor de pagamentos real (cartão/Pix) — hoje 100% simulado',
-  'Rotas viárias: OSRM para o trajeto de carro e perfil de bicicleta FOSSGIS para o motorista até o embarque; hospedagem própria e disponibilidade garantida ainda pendentes',
+  'Rotas viárias: OSRM para carro e perfil bicycle do Valhalla, com FOSSGIS como alternativa para o motorista até o embarque; hospedagem própria e disponibilidade garantida ainda pendentes',
   'Notificações push (FCM/APNs)',
   'Upload e armazenamento seguro de documentos e fotos do veículo',
   'Painel da operação: login individual, permissões por perfil e MFA (hoje: chave única de demonstração); cadastro de novas áreas; cupons e parcerias',
@@ -148,17 +148,20 @@ const routeCache = new Map();
 let osrmNextAllowedAt = 0;
 let osrmQueue = Promise.resolve();
 
-function fetchOsrmLimited(url) {
+function fetchRoutingLimited(url, options = {}) {
   const task = osrmQueue.then(async () => {
     const waitMs = Math.max(0, osrmNextAllowedAt - Date.now());
     if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
     osrmNextAllowedAt = Date.now() + 1100;
+    const { headers: customHeaders, ...requestOptions } = options;
     return fetch(url, {
+      ...requestOptions,
       headers: {
         Accept: 'application/json',
         'User-Agent': 'DrinkPrototype/0.1 (Mossoro RN route preview)',
+        ...customHeaders,
       },
-      signal: AbortSignal.timeout(15000),
+      signal: requestOptions.signal || AbortSignal.timeout(15000),
     });
   });
   osrmQueue = task.then(() => undefined, () => undefined);
@@ -194,54 +197,101 @@ route('GET', '/api/route', async (req) => {
   const cached = routeCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
-  const coordinates = `${pickup.lng},${pickup.lat};${dest.lng},${dest.lat}`;
-  // O perfil bike usa a instância FOSSGIS específica para bicicletas. O perfil de carro
-  // existente continua no demo OSRM original para não alterar as rotas do cliente.
-  const baseUrl = mode === 'bike'
-    ? 'https://routing.openstreetmap.de/routed-bike'
-    : 'https://router.project-osrm.org';
-  const upstream = new URL(`${baseUrl}/route/v1/driving/${coordinates}`);
-  upstream.searchParams.set('overview', 'full');
-  upstream.searchParams.set('geometries', 'geojson');
-  upstream.searchParams.set('steps', 'false');
+  let output = null;
 
-  let response;
-  try {
-    response = await fetchOsrmLimited(upstream);
-  } catch (error) {
-    console.error('[route] falha de conexão com OSRM:', error.message);
-    throw new R.HttpError(502, 'Não foi possível conectar ao serviço de rotas. Tente novamente.');
-  }
-
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    throw new R.HttpError(502, 'O serviço de rotas enviou uma resposta inválida.');
-  }
-  if (!response.ok || data.code !== 'Ok' || !data.routes?.[0]) {
-    const detail = String(data.message || data.code || response.status).slice(0, 120);
-    console.error('[route] OSRM respondeu com erro:', response.status, detail);
-    if (response.status === 429 || response.status >= 500) {
-      throw new R.HttpError(503, 'O serviço de rotas está ocupado ou indisponível. Tente novamente em instantes.');
+  // Para a bicicleta, usa primeiro o Valhalla com perfil bicycle de verdade.
+  // O formato OSRM + GeoJSON permite reutilizar a mesma geometria no mapa Leaflet.
+  if (mode === 'bike') {
+    try {
+      const response = await fetchRoutingLimited('https://valhalla1.openstreetmap.de/route', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-Id': 'drink-prototype-mossoro',
+        },
+        body: JSON.stringify({
+          locations: [
+            { lat: pickup.lat, lon: pickup.lng },
+            { lat: dest.lat, lon: dest.lng },
+          ],
+          costing: 'bicycle',
+          units: 'kilometers',
+          format: 'osrm',
+          shape_format: 'geojson',
+          directions_type: 'none',
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      const candidate = data.routes?.[0];
+      const coordinatesOut = candidate?.geometry?.coordinates;
+      if (!response.ok || !candidate || !Array.isArray(coordinatesOut) ||
+          coordinatesOut.length < 2 ||
+          !Number.isFinite(candidate.distance) || !Number.isFinite(candidate.duration)) {
+        throw new Error(data.error || data.status_message || 'Valhalla não retornou uma rota de bicicleta válida.');
+      }
+      output = {
+        provider: 'VALHALLA-BICYCLE',
+        mode,
+        distanceKm: Math.round((candidate.distance / 1000) * 10) / 10,
+        durationMin: Math.max(1, Math.round(candidate.duration / 60)),
+        geometry: candidate.geometry,
+        geometryPointCount: coordinatesOut.length,
+      };
+    } catch (error) {
+      console.warn('[route] Valhalla bicicleta indisponível; tentando FOSSGIS:', error.message);
     }
-    throw new R.HttpError(422, 'Não foi possível encontrar um caminho pelas ruas entre esses endereços.');
   }
 
-  const result = data.routes[0];
-  const coordinatesOut = result.geometry?.coordinates;
-  if (!Array.isArray(coordinatesOut) || coordinatesOut.length < 2 ||
-      !Number.isFinite(result.distance) || !Number.isFinite(result.duration)) {
-    throw new R.HttpError(502, 'O serviço de rotas retornou um trajeto incompleto.');
-  }
+  // Alternativa para bicicleta: instância pública FOSSGIS com perfil routed-bike.
+  // Para carro, mantém o OSRM original sem mudança.
+  if (!output) {
+    const coordinates = `${pickup.lng},${pickup.lat};${dest.lng},${dest.lat}`;
+    const baseUrl = mode === 'bike'
+      ? 'https://routing.openstreetmap.de/routed-bike'
+      : 'https://router.project-osrm.org';
+    const upstream = new URL(`${baseUrl}/route/v1/driving/${coordinates}`);
+    upstream.searchParams.set('overview', 'full');
+    upstream.searchParams.set('geometries', 'geojson');
+    upstream.searchParams.set('steps', 'false');
 
-  const output = {
-    provider: mode === 'bike' ? 'FOSSGIS-OSRM-BIKE' : 'OSRM',
-    mode,
-    distanceKm: Math.round((result.distance / 1000) * 10) / 10,
-    durationMin: Math.max(1, Math.round(result.duration / 60)),
-    geometry: result.geometry,
-  };
+    let response;
+    try {
+      response = await fetchRoutingLimited(upstream);
+    } catch (error) {
+      console.error('[route] falha de conexão com serviço de rotas:', error.message);
+      throw new R.HttpError(502, 'Não foi possível conectar ao serviço de rotas. Tente novamente.');
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new R.HttpError(502, 'O serviço de rotas enviou uma resposta inválida.');
+    }
+    if (!response.ok || data.code !== 'Ok' || !data.routes?.[0]) {
+      const detail = String(data.message || data.code || response.status).slice(0, 120);
+      console.error('[route] OSRM respondeu com erro:', response.status, detail);
+      if (response.status === 429 || response.status >= 500) {
+        throw new R.HttpError(503, 'O serviço de rotas está ocupado ou indisponível. Tente novamente em instantes.');
+      }
+      throw new R.HttpError(422, 'Não foi possível encontrar um caminho pelas ruas entre esses endereços.');
+    }
+
+    const result = data.routes[0];
+    const coordinatesOut = result.geometry?.coordinates;
+    if (!Array.isArray(coordinatesOut) || coordinatesOut.length < 2 ||
+        !Number.isFinite(result.distance) || !Number.isFinite(result.duration)) {
+      throw new R.HttpError(502, 'O serviço de rotas retornou um trajeto incompleto.');
+    }
+    output = {
+      provider: mode === 'bike' ? 'FOSSGIS-OSRM-BIKE' : 'OSRM',
+      mode,
+      distanceKm: Math.round((result.distance / 1000) * 10) / 10,
+      durationMin: Math.max(1, Math.round(result.duration / 60)),
+      geometry: result.geometry,
+      geometryPointCount: coordinatesOut.length,
+    };
+  }
 
   if (routeCache.size > 300) {
     for (const [key, value] of routeCache) {
