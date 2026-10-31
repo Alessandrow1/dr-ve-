@@ -92,7 +92,7 @@ route('GET', '/api/geocode', async (req) => {
   const cached = geocodeCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
-  const upstream = new URL('https://photon.komoot.io/api/');
+  const upstream = new URL('https://photon.komoot.io/api');
   upstream.searchParams.set('q', query + ', Mossoró, Rio Grande do Norte, Brasil');
   upstream.searchParams.set('lat', String(SERVICE_AREA.center.lat));
   upstream.searchParams.set('lon', String(SERVICE_AREA.center.lng));
