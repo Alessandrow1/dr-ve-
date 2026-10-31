@@ -166,9 +166,11 @@ export function mapView(cfg) {
   const tiles = L.tileLayer(tileUrls[getTheme()], {
     maxZoom: 20,
     attribution:
-      '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> ' +
-      '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> ' +
-      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+      '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> · ' +
+      '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · ' +
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · ' +
+      'Rotas: <a href="https://valhalla.openstreetmap.de/" target="_blank" rel="noopener">Valhalla</a> / ' +
+      '<a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">OSRM</a>',
   }).addTo(map);
 
   window.addEventListener('drink:theme-change', (event) => {
@@ -201,16 +203,9 @@ export function mapView(cfg) {
   const driverRoute = L.polyline([], {
     color: '#65B8FF', weight: 5, opacity: 0.95, dashArray: '9 8', lineCap: 'round', lineJoin: 'round',
   });
-  // Créditos compactos: mantém as atribuições exigidas sem o prefixo visual do Leaflet.
+  // Mantém uma única atribuição e a posiciona longe dos controles interativos.
   map.attributionControl.setPrefix(false);
-  map.attributionControl.addAttribution(
-    '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> · ' +
-    '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · ' +
-    '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · ' +
-    'Rotas: <a href="https://valhalla.openstreetmap.de/" target="_blank" rel="noopener">Valhalla</a> / ' +
-    '<a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">OSRM</a> · ' +
-    '<a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener">corrigir mapa</a>',
-  );
+  map.attributionControl.setPosition('topright');
   let lastRouteKey = '';
   let routeRequestId = 0;
   let routeController = null;
