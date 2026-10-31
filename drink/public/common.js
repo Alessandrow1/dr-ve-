@@ -169,6 +169,13 @@ export function mapView(cfg) {
   let routeRequestId = 0;
   let routeController = null;
   let routeTimer = null;
+  let routeCoordinates = [];
+  let routeSegments = [];
+  let routeLengthKm = 0;
+  let currentDriverPosition = null;
+  let currentDriverProgress = null;
+  let displayedDriverProgress = null;
+  let driverAnimationFrame = null;
   let locating = false;
 
   function setMarker(marker, point) {
@@ -178,6 +185,96 @@ export function mapView(cfg) {
     }
     if (!map.hasLayer(marker)) marker.addTo(map);
     marker.setLatLng([Number(point.lat), Number(point.lng)]);
+  }
+
+  // Precalcula a extensão da rota para posicionar a simulação ao longo das ruas.
+  function buildRouteSegments(coordinates) {
+    routeCoordinates = Array.isArray(coordinates) ? coordinates : [];
+    routeSegments = [];
+    routeLengthKm = 0;
+    for (let i = 1; i < routeCoordinates.length; i++) {
+      const a = routeCoordinates[i - 1];
+      const b = routeCoordinates[i];
+      const lengthKm = haversineKm(
+        { lat: Number(a[1]), lng: Number(a[0]) },
+        { lat: Number(b[1]), lng: Number(b[0]) },
+      );
+      if (!Number.isFinite(lengthKm)) continue;
+      routeSegments.push({ a, b, lengthKm, startKm: routeLengthKm });
+      routeLengthKm += lengthKm;
+    }
+  }
+
+  function routePointAt(progress) {
+    if (!routeSegments.length || routeLengthKm <= 0) return null;
+    const targetKm = Math.max(0, Math.min(1, Number(progress))) * routeLengthKm;
+    for (let i = 0; i < routeSegments.length; i++) {
+      const segment = routeSegments[i];
+      const endKm = segment.startKm + segment.lengthKm;
+      if (targetKm <= endKm || i === routeSegments.length - 1) {
+        const ratio = segment.lengthKm > 0
+          ? Math.max(0, Math.min(1, (targetKm - segment.startKm) / segment.lengthKm))
+          : 0;
+        return {
+          lat: Number(segment.a[1]) + (Number(segment.b[1]) - Number(segment.a[1])) * ratio,
+          lng: Number(segment.a[0]) + (Number(segment.b[0]) - Number(segment.a[0])) * ratio,
+        };
+      }
+    }
+    const last = routeCoordinates[routeCoordinates.length - 1];
+    return last ? { lat: Number(last[1]), lng: Number(last[0]) } : null;
+  }
+
+  function stopDriverAnimation() {
+    if (driverAnimationFrame != null) cancelAnimationFrame(driverAnimationFrame);
+    driverAnimationFrame = null;
+  }
+
+  function setDriverMarker(point) {
+    setMarker(driver, point);
+    if (map.hasLayer(driver)) driver.bringToFront();
+  }
+
+  function showDriverProgress(progress, animate = false) {
+    if (progress == null || !routeSegments.length) {
+      stopDriverAnimation();
+      displayedDriverProgress = null;
+      setDriverMarker(currentDriverPosition);
+      return;
+    }
+
+    const target = Math.max(0, Math.min(1, Number(progress)));
+    if (!animate || displayedDriverProgress == null || target <= displayedDriverProgress) {
+      stopDriverAnimation();
+      displayedDriverProgress = target;
+      setDriverMarker(routePointAt(target) || currentDriverPosition);
+      return;
+    }
+
+    stopDriverAnimation();
+    const from = displayedDriverProgress;
+    const startedAt = performance.now();
+    const durationMs = 2200;
+    const tick = (nowMs) => {
+      const fraction = Math.max(0, Math.min(1, (nowMs - startedAt) / durationMs));
+      displayedDriverProgress = from + (target - from) * fraction;
+      setDriverMarker(routePointAt(displayedDriverProgress) || currentDriverPosition);
+      if (fraction < 1) {
+        driverAnimationFrame = requestAnimationFrame(tick);
+      } else {
+        displayedDriverProgress = target;
+        driverAnimationFrame = null;
+      }
+    };
+    driverAnimationFrame = requestAnimationFrame(tick);
+  }
+
+  function clearRouteGeometry() {
+    routeCoordinates = [];
+    routeSegments = [];
+    routeLengthKm = 0;
+    displayedDriverProgress = null;
+    stopDriverAnimation();
   }
 
   function locate() {
@@ -225,11 +322,12 @@ export function mapView(cfg) {
         throw new Error('O serviço de rotas não retornou um caminho válido.');
       }
 
+      buildRouteSegments(coordinates);
       route.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
       if (!map.hasLayer(route)) route.addTo(map);
       pickup.bringToFront();
       dest.bringToFront();
-      if (map.hasLayer(driver)) driver.bringToFront();
+      showDriverProgress(currentDriverProgress, false);
       if (map.hasLayer(user)) user.bringToFront();
       map.fitBounds(route.getBounds().pad(0.2), { maxZoom: 16, animate: true });
 
@@ -251,15 +349,26 @@ export function mapView(cfg) {
     routeController?.abort();
     routeController = null;
     if (map.hasLayer(route)) map.removeLayer(route);
+    clearRouteGeometry();
+    setDriverMarker(currentDriverPosition);
     lastRouteKey = '';
   }
 
   return {
     el,
-    update({ pickup: pk, dest: ds, driver: dr }) {
+    update({ pickup: pk, dest: ds, driver: dr, driverProgress: progress }) {
+      currentDriverPosition = dr || null;
+      const previousProgress = currentDriverProgress;
+      currentDriverProgress = progress == null || !Number.isFinite(Number(progress))
+        ? null
+        : Math.max(0, Math.min(1, Number(progress)));
+
       setMarker(pickup, pk);
       setMarker(dest, ds);
-      setMarker(driver, dr);
+      showDriverProgress(
+        currentDriverProgress,
+        previousProgress != null && currentDriverProgress != null && currentDriverProgress > previousProgress,
+      );
 
       if (pk && ds) {
         const points = [[Number(pk.lat), Number(pk.lng)], [Number(ds.lat), Number(ds.lng)]];
@@ -273,6 +382,8 @@ export function mapView(cfg) {
           const controller = new AbortController();
           routeController = controller;
           if (map.hasLayer(route)) map.removeLayer(route);
+          clearRouteGeometry();
+          setDriverMarker(currentDriverPosition);
           note.textContent = 'CALCULANDO ROTA PELAS RUAS...';
           note.classList.remove('map-note-error');
           map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 16, animate: true });
