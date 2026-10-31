@@ -318,6 +318,30 @@ test('motorista simulado atende dois pedidos simultâneos, um de cada vez', asyn
   await until(a.data.ride.id, a.data.token, 'servico_concluido', 30000);
   await until(b.data.ride.id, b.data.token, 'servico_concluido', 30000);
 });
+test('ocorrência de emergência ou avaria isenta o motorista da penalidade automática', async () => {
+  resetForTests();
+  await call('POST', '/api/driver/online', {
+    headers: D,
+    body: { online: true, pos: { lat: -5.19, lng: -37.341, accuracy: 12 } },
+  });
+  const created = await call('POST', '/api/rides', { body: rideBody() });
+  const H = { 'x-ride-token': created.data.token };
+  const id = created.data.ride.id;
+  await call('POST', `/api/rides/${id}/confirm`, { headers: H });
+  await call('POST', `/api/driver/rides/${id}/accept`, { headers: D });
+  await call('POST', `/api/driver/rides/${id}/depart`, { headers: D });
+  await call('POST', `/api/driver/rides/${id}/incident`, {
+    headers: D, body: { kind: 'avaria', text: 'Pneu furou durante o deslocamento.' },
+  });
+  store.db.rides[id].pickupProgress.lastProgressAt = Date.now() - 3 * 60 * 1000 - 1000;
+  store.db.drivers.d_rafael.posAt = Date.now();
+  const r = await call('POST', `/api/rides/${id}/cancel`, { headers: H });
+  assert.equal(r.data.cancel.fee, 0);
+  assert.equal(r.data.cancel.driverPenalty, 'justificado_por_ocorrencia');
+  assert.equal(store.db.drivers.d_rafael.pickupIssues || [], []);
+  assert.equal(store.db.drivers.d_rafael.online, true);
+});
+
 test('cliente cancela sem custo por falta de avanço ou atraso, com penalidade progressiva ao motorista', async () => {
   resetForTests();
 
