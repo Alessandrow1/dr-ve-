@@ -190,6 +190,77 @@ function showHome() {
     container.replaceChildren(h('p', { class: 'muted small address-message' }, message));
   }
 
+  const RECENT_ADDRESS_LIMIT = 8;
+
+  function getRecentAddresses() {
+    const saved = store.get('recentAddresses', []);
+    if (!Array.isArray(saved)) return [];
+    return saved.filter((item) =>
+      item && typeof item.label === 'string' &&
+      Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng)))
+      .slice(0, RECENT_ADDRESS_LIMIT);
+  }
+
+  function rememberAddress(point) {
+    if (!point || typeof point.label !== 'string' ||
+        !Number.isFinite(Number(point.lat)) || !Number.isFinite(Number(point.lng))) return;
+    const entry = {
+      label: point.label.slice(0, 180),
+      lat: Number(point.lat),
+      lng: Number(point.lng),
+    };
+    const sameAddress = (item) =>
+      (Number(item.lat).toFixed(5) === entry.lat.toFixed(5) &&
+       Number(item.lng).toFixed(5) === entry.lng.toFixed(5)) ||
+      item.label.trim().toLocaleLowerCase('pt-BR') === entry.label.trim().toLocaleLowerCase('pt-BR');
+    store.set('recentAddresses', [
+      entry,
+      ...getRecentAddresses().filter((item) => !sameAddress(item)),
+    ].slice(0, RECENT_ADDRESS_LIMIT));
+  }
+
+  function selectAddress(kind, point, container) {
+    if (kind === 'pickup') {
+      S.pickup = point;
+      pickupInput.value = point.label;
+    } else {
+      S.dest = point;
+      destInput.value = point.label;
+    }
+    rememberAddress(point);
+    container.replaceChildren();
+    refresh();
+  }
+
+  function renderRecentAddresses(kind, container) {
+    const recent = getRecentAddresses();
+    if (!recent.length) {
+      container.replaceChildren();
+      return;
+    }
+    const heading = h('div', { class: 'address-history-head' },
+      h('span', {}, 'Endereços recentes'),
+      h('button', {
+        class: 'address-history-clear',
+        type: 'button',
+        onclick: () => {
+          store.set('recentAddresses', []);
+          container.replaceChildren();
+        },
+      }, 'Limpar histórico'));
+    container.replaceChildren(heading, ...recent.map((item) =>
+      h('button', {
+        class: 'address-result recent',
+        type: 'button',
+        role: 'option',
+        onclick: () => selectAddress(kind, { lat: Number(item.lat), lng: Number(item.lng), label: item.label }, container),
+      },
+        h('span', { class: 'address-result-icon', 'aria-hidden': 'true' }, '↻'),
+        h('span', { class: 'address-result-copy' },
+          h('strong', {}, item.label),
+          h('small', {}, 'Usado recentemente')))));
+  }
+
   function describeFeature(feature, typedQuery) {
     const props = feature.properties || {};
     const coords = feature.geometry && feature.geometry.coordinates;
@@ -256,17 +327,7 @@ function showHome() {
       container.replaceChildren(...results.map((result) =>
         h('button', {
           class: 'address-result', type: 'button', role: 'option',
-          onclick: () => {
-            if (kind === 'pickup') {
-              S.pickup = result.point;
-              pickupInput.value = result.point.label;
-            } else {
-              S.dest = result.point;
-              destInput.value = result.point.label;
-            }
-            container.replaceChildren();
-            refresh();
-          },
+          onclick: () => selectAddress(kind, result.point, container),
         },
           h('span', { class: 'address-result-icon', 'aria-hidden': 'true' }, kind === 'pickup' ? '●' : '◆'),
           h('span', { class: 'address-result-copy' },
@@ -299,8 +360,20 @@ function showHome() {
     timers[kind] = setTimeout(() => searchAddress(kind, input, container), 850);
   }
 
-  pickupInput.addEventListener('input', () => scheduleSearch('pickup', pickupInput, pickupResults));
-  destInput.addEventListener('input', () => scheduleSearch('dest', destInput, destResults));
+  pickupInput.addEventListener('focus', () => {
+    if (!pickupInput.value.trim()) renderRecentAddresses('pickup', pickupResults);
+  });
+  destInput.addEventListener('focus', () => {
+    if (!destInput.value.trim()) renderRecentAddresses('dest', destResults);
+  });
+  pickupInput.addEventListener('input', () => {
+    scheduleSearch('pickup', pickupInput, pickupResults);
+    if (!pickupInput.value.trim()) renderRecentAddresses('pickup', pickupResults);
+  });
+  destInput.addEventListener('input', () => {
+    scheduleSearch('dest', destInput, destResults);
+    if (!destInput.value.trim()) renderRecentAddresses('dest', destResults);
+  });
   pickupInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timers.pickup); searchAddress('pickup', pickupInput, pickupResults); }
   });
