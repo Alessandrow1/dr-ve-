@@ -134,6 +134,9 @@ export function mapView(cfg) {
     'aria-label': 'Mapa de ruas de Mossoró com embarque, destino e localização atual',
   });
   const note = h('span', { class: 'map-note' }, 'MOSSORÓ · RN');
+  const routeLegendLabel = h('span', {}, 'Motorista · rota de bicicleta');
+  const routeLegend = h('div', { class: 'map-route-legend', hidden: true },
+    h('i', { class: 'bike-route-swatch', 'aria-hidden': 'true' }), routeLegendLabel);
   const recenter = h('button', {
     class: 'map-recenter',
     type: 'button',
@@ -141,7 +144,7 @@ export function mapView(cfg) {
     'aria-label': 'Centralizar na minha localização',
     onclick: locate,
   }, h('span', { 'aria-hidden': 'true' }, '⌖'));
-  const el = h('div', { class: 'mapwrap' }, mapEl, note, recenter);
+  const el = h('div', { class: 'mapwrap' }, mapEl, note, routeLegend, recenter);
 
   if (!globalThis.L) {
     mapEl.textContent = 'Não foi possível carregar o mapa. Verifique sua conexão e atualize a página.';
@@ -324,6 +327,8 @@ export function mapView(cfg) {
     driverRouteController?.abort();
     driverRouteController = null;
     if (map.hasLayer(driverRoute)) map.removeLayer(driverRoute);
+    routeLegend.hidden = true;
+    routeLegendLabel.textContent = 'Motorista · rota de bicicleta';
     driverRouteCoordinates = [];
     driverRouteKey = '';
     lastDriverRouteOrigin = null;
@@ -364,6 +369,8 @@ export function mapView(cfg) {
       driverRoute.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
       if (!map.hasLayer(driverRoute)) driverRoute.addTo(map);
       driverRoute.bringToFront();
+      routeLegendLabel.textContent = `Motorista · bicicleta · ${distance} km · ${duration} min`;
+      routeLegend.hidden = false;
       pickup.bringToFront();
       dest.bringToFront();
       setDriverMarker(currentDriverPosition);
@@ -380,8 +387,12 @@ export function mapView(cfg) {
     } catch (error) {
       if (error.name === 'AbortError' || requestId !== driverRouteRequestId) return;
       console.warn('[map] falha ao calcular rota de bicicleta:', error);
-      note.textContent = 'ROTA DO MOTORISTA INDISPONÍVEL';
-      note.classList.add('map-note-error');
+      routeLegend.hidden = false;
+      routeLegendLabel.textContent = 'Rota de bicicleta temporariamente indisponível';
+      if (!map.hasLayer(route)) {
+        note.textContent = 'ROTA DO MOTORISTA INDISPONÍVEL';
+        note.classList.add('map-note-error');
+      }
     }
   }
 
@@ -518,13 +529,15 @@ export function mapView(cfg) {
 
       const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
       const duration = Math.max(1, Number(data.durationMin) || 1);
-      note.textContent = `ROTA · ${distance} km · ${duration} min`;
+      if (!map.hasLayer(driverRoute)) note.textContent = `ROTA · ${distance} km · ${duration} min`;
       note.classList.remove('map-note-error');
     } catch (error) {
       if (error.name === 'AbortError' || requestId !== routeRequestId) return;
       console.warn('[map] falha ao calcular rota viária:', error);
-      note.textContent = error.message.length > 64 ? 'ROTA INDISPONÍVEL · tente novamente' : error.message;
-      note.classList.add('map-note-error');
+      if (!map.hasLayer(driverRoute)) {
+        note.textContent = error.message.length > 64 ? 'ROTA INDISPONÍVEL · tente novamente' : error.message;
+        note.classList.add('map-note-error');
+      }
     }
   }
 
