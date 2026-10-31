@@ -325,6 +325,74 @@ export function mapView(cfg) {
     return best && Math.sqrt(bestDistanceSq) <= maxDistanceKm * 1000 ? best : point;
   }
 
+  // Projeta o GPS na rota do carro e devolve a fração já percorrida (0 a 1).
+  function routeProgressForPosition(point, maxDistanceKm = 0.2) {
+    if (!point || !routeSegments.length || routeLengthKm <= 0) return null;
+    const radians = point.lat * Math.PI / 180;
+    const xScale = 111320 * Math.cos(radians);
+    const yScale = 111320;
+    let bestDistanceSq = Infinity;
+    let bestProgress = null;
+
+    for (const segment of routeSegments) {
+      const ax = (Number(segment.a[0]) - point.lng) * xScale;
+      const ay = (Number(segment.a[1]) - point.lat) * yScale;
+      const bx = (Number(segment.b[0]) - point.lng) * xScale;
+      const by = (Number(segment.b[1]) - point.lat) * yScale;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lengthSq = dx * dx + dy * dy;
+      const ratio = lengthSq > 0
+        ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSq))
+        : 0;
+      const x = ax + dx * ratio;
+      const y = ay + dy * ratio;
+      const distanceSq = x * x + y * y;
+      if (distanceSq < bestDistanceSq) {
+        bestDistanceSq = distanceSq;
+        bestProgress = (segment.startKm + segment.lengthKm * ratio) / routeLengthKm;
+      }
+    }
+    return bestProgress != null && Math.sqrt(bestDistanceSq) <= maxDistanceKm * 1000
+      ? Math.max(0, Math.min(1, bestProgress))
+      : null;
+  }
+
+  // Retorna somente a parte da geometria que ainda falta percorrer.
+  function remainingRouteCoordinates(progress) {
+    if (!routeCoordinates.length) return [];
+    const amount = Math.max(0, Math.min(1, Number(progress) || 0));
+    if (amount <= 0) return routeCoordinates;
+    if (amount >= 0.99999) return [];
+
+    const targetKm = amount * routeLengthKm;
+    for (const segment of routeSegments) {
+      const endKm = segment.startKm + segment.lengthKm;
+      if (targetKm <= endKm) {
+        const ratio = segment.lengthKm > 0
+          ? Math.max(0, Math.min(1, (targetKm - segment.startKm) / segment.lengthKm))
+          : 0;
+        const current = [
+          Number(segment.a[0]) + (Number(segment.b[0]) - Number(segment.a[0])) * ratio,
+          Number(segment.a[1]) + (Number(segment.b[1]) - Number(segment.a[1])) * ratio,
+        ];
+        const nextIndex = routeCoordinates.indexOf(segment.a) + 1;
+        return [current, ...routeCoordinates.slice(nextIndex)];
+      }
+    }
+    return [];
+  }
+
+  function updateRemainingCustomerRoute(progress) {
+    if (!routeCoordinates.length) return;
+    let amount = progress;
+    if (amount == null) {
+      amount = routeProgressForPosition(currentDriverPosition);
+    }
+    // Sem GPS ou progresso ainda disponível, preserva toda a rota.
+    route.setLatLngs(remainingRouteCoordinates(amount ?? 0).map(([lng, lat]) => [Number(lat), Number(lng)]));
+  }
+
   function buildDriverRouteMetrics(coordinates) {
     driverRouteCoordinates = Array.isArray(coordinates) ? coordinates : [];
     driverRouteSegments = [];
@@ -544,10 +612,25 @@ export function mapView(cfg) {
   }
 
   function showDriverProgress(progress, animate = false) {
-    if (progress == null || !routeSegments.length) {
+    if (!routeSegments.length) {
       stopDriverAnimation();
       displayedDriverProgress = null;
       setDriverMarker(currentDriverPosition);
+      return;
+    }
+
+    if (progress == null || !Number.isFinite(Number(progress))) {
+      stopDriverAnimation();
+      const gpsProgress = routeProgressForPosition(currentDriverPosition);
+      if (gpsProgress != null) {
+        displayedDriverProgress = Math.max(displayedDriverProgress ?? 0, gpsProgress);
+        setDriverMarker(routePointAt(displayedDriverProgress) || currentDriverPosition);
+        updateRemainingCustomerRoute(displayedDriverProgress);
+      } else {
+        displayedDriverProgress = null;
+        setDriverMarker(currentDriverPosition);
+        updateRemainingCustomerRoute(0);
+      }
       return;
     }
 
@@ -556,6 +639,7 @@ export function mapView(cfg) {
       stopDriverAnimation();
       displayedDriverProgress = target;
       setDriverMarker(routePointAt(target) || currentDriverPosition);
+      updateRemainingCustomerRoute(target);
       return;
     }
 
@@ -563,14 +647,22 @@ export function mapView(cfg) {
     const from = displayedDriverProgress;
     const startedAt = performance.now();
     const durationMs = 2200;
+    let lastRouteTrimAt = 0;
     const tick = (nowMs) => {
       const fraction = Math.max(0, Math.min(1, (nowMs - startedAt) / durationMs));
       displayedDriverProgress = from + (target - from) * fraction;
       setDriverMarker(routePointAt(displayedDriverProgress) || currentDriverPosition);
+      // Atualiza a linha em intervalos curtos para ela desaparecer junto com o marcador,
+      // sem reconstruir a geometria inteira em todos os frames da animação.
+      if (nowMs - lastRouteTrimAt >= 100 || fraction >= 1) {
+        updateRemainingCustomerRoute(displayedDriverProgress);
+        lastRouteTrimAt = nowMs;
+      }
       if (fraction < 1) {
         driverAnimationFrame = requestAnimationFrame(tick);
       } else {
         displayedDriverProgress = target;
+        updateRemainingCustomerRoute(target);
         driverAnimationFrame = null;
       }
     };
