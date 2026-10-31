@@ -661,7 +661,11 @@ export function mapView(cfg) {
 
   return {
     el,
-    update({ pickup: pk, dest: ds, driver: dr, driverProgress: progress, driverPickupProgress: pickupProgress, driverRouteStart }) {
+    update({ pickup: pk, dest: ds, driver: dr, state, driverProgress: progress, driverPickupProgress: pickupProgress, driverRouteStart }) {
+      const approachingPickup = ['motorista_encontrado', 'motorista_a_caminho'].includes(state);
+      const showingCustomerTrip = ['servico_iniciado', 'em_andamento'].includes(state);
+      // Sem state é o mapa de prévia da cotação: mantém a rota verde.
+      const showCustomerRoute = state == null || showingCustomerTrip;
       currentDriverPosition = dr || null;
       currentPickupPoint = pk || null;
       currentDriverRouteStart = driverRouteStart || null;
@@ -684,10 +688,10 @@ export function mapView(cfg) {
       const routeOrigin = currentDriverPickupProgress != null && currentDriverRouteStart
         ? currentDriverRouteStart
         : currentDriverPosition;
-      if (routeOrigin && pk) scheduleDriverRoadRoute(routeOrigin, pk);
+      if (approachingPickup && routeOrigin && pk) scheduleDriverRoadRoute(routeOrigin, pk);
       else clearDriverRoute();
 
-      if (pk && ds) {
+      if (showCustomerRoute && pk && ds) {
         const points = [[Number(pk.lat), Number(pk.lng)], [Number(ds.lat), Number(ds.lng)]];
         const key = points.map((p) => p.map((v) => v.toFixed(5)).join(',')).join('|');
         if (key !== lastRouteKey) {
