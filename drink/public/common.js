@@ -593,18 +593,26 @@ export function mapView(cfg) {
     }
     locating = true;
     recenter.disabled = true;
+    note.textContent = 'ATUALIZANDO SUA LOCALIZAÇÃO...';
     navigator.geolocation.getCurrentPosition((position) => {
       locating = false;
       recenter.disabled = false;
       const point = { lat: position.coords.latitude, lng: position.coords.longitude };
       setMarker(user, point);
-      map.flyTo([point.lat, point.lng], 16, { duration: 0.8 });
-      note.textContent = 'SUA LOCALIZAÇÃO';
-    }, () => {
+      map.flyTo([point.lat, point.lng], 17, { duration: 0.8 });
+      note.textContent = 'SUA LOCALIZAÇÃO ATUAL';
+    }, (error) => {
       locating = false;
       recenter.disabled = false;
-      note.textContent = 'NÃO FOI POSSÍVEL LOCALIZAR';
-    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+      note.textContent = error.code === 1
+        ? 'PERMITA O ACESSO À LOCALIZAÇÃO'
+        : 'NÃO FOI POSSÍVEL ATUALIZAR O GPS';
+    }, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      // Não aceita a posição que o navegador guardou de uma leitura anterior.
+      maximumAge: 0,
+    });
   }
 
   requestAnimationFrame(() => requestAnimationFrame(() => map.invalidateSize({ pan: false })));
