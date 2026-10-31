@@ -10,7 +10,7 @@ import * as D from './drivers.js';
 import * as A from './admin.js';
 import { scheduleBot } from './dispatch.js';
 import { subscribe, closeAll } from './events.js';
-import { PLACES, SERVICE_AREA, MAP_BOUNDS } from './geo.js';
+import { PLACES, SERVICE_AREA, MAP_BOUNDS, haversineKm } from './geo.js';
 import { METHODS } from './payments.js';
 import { DEFAULT_TARIFF } from './pricing.js';
 
@@ -27,7 +27,7 @@ const PENDING = [
   'Verificação de CNH junto ao órgão de trânsito e consulta de antecedentes (provedor externo)',
   'Verificação de seguro/responsabilidade civil compatível com o serviço',
   'Provedor de pagamentos real (cartão/Pix) — hoje 100% simulado',
-  'Rotas viárias reais e cálculo de distância/tempo pelas ruas — o mapa e a busca de endereços já estão integrados no protótipo',
+  'Rotas viárias: primeira integração experimental com OSRM concluída; hospedagem própria e disponibilidade garantida ainda pendentes',
   'Notificações push (FCM/APNs)',
   'Upload e armazenamento seguro de documentos e fotos do veículo',
   'Painel da operação: login individual, permissões por perfil e MFA (hoje: chave única de demonstração); cadastro de novas áreas; cupons e parcerias',
@@ -142,6 +142,109 @@ route('GET', '/api/geocode', async (req) => {
   }
   geocodeCache.set(cacheKey, { data, expiresAt: Date.now() + 5 * 60 * 1000 });
   return data;
+});
+
+// Cache e limitador para respeitar o servidor público de demonstração do OSRM (máx. 1 req/s).
+const routeCache = new Map();
+let osrmNextAllowedAt = 0;
+let osrmQueue = Promise.resolve();
+
+function fetchOsrmLimited(url) {
+  const task = osrmQueue.then(async () => {
+    const waitMs = Math.max(0, osrmNextAllowedAt - Date.now());
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    osrmNextAllowedAt = Date.now() + 1100;
+    return fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'DrinkPrototype/0.1 (Mossoro RN route preview)',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+  });
+  osrmQueue = task.then(() => undefined, () => undefined);
+  return task;
+}
+
+// Rota viária real (carro) para o mapa do cliente.
+route('GET', '/api/route', async (req) => {
+  const params = new URL(req.url, 'http://localhost').searchParams;
+  const pickup = {
+    lat: Number(params.get('pickupLat')),
+    lng: Number(params.get('pickupLng')),
+  };
+  const dest = {
+    lat: Number(params.get('destLat')),
+    lng: Number(params.get('destLng')),
+  };
+
+  const validPoint = (p) =>
+    Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
+    Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
+  if (!validPoint(pickup) || !validPoint(dest)) {
+    throw new R.HttpError(422, 'Coordenadas inválidas para calcular a rota.');
+  }
+  if (haversineKm(SERVICE_AREA.center, pickup) > SERVICE_AREA.radiusKm ||
+      haversineKm(SERVICE_AREA.center, dest) > SERVICE_AREA.radiusKm) {
+    throw new R.HttpError(422, 'A rota precisa começar e terminar dentro da área de Mossoró.');
+  }
+
+  const cacheKey = [pickup.lat, pickup.lng, dest.lat, dest.lng]
+    .map((value) => value.toFixed(5)).join(',');
+  const cached = routeCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  const coordinates = `${pickup.lng},${pickup.lat};${dest.lng},${dest.lat}`;
+  const upstream = new URL(`https://router.project-osrm.org/route/v1/driving/${coordinates}`);
+  upstream.searchParams.set('overview', 'full');
+  upstream.searchParams.set('geometries', 'geojson');
+  upstream.searchParams.set('steps', 'false');
+
+  let response;
+  try {
+    response = await fetchOsrmLimited(upstream);
+  } catch (error) {
+    console.error('[route] falha de conexão com OSRM:', error.message);
+    throw new R.HttpError(502, 'Não foi possível conectar ao serviço de rotas. Tente novamente.');
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new R.HttpError(502, 'O serviço de rotas enviou uma resposta inválida.');
+  }
+  if (!response.ok || data.code !== 'Ok' || !data.routes?.[0]) {
+    const detail = String(data.message || data.code || response.status).slice(0, 120);
+    console.error('[route] OSRM respondeu com erro:', response.status, detail);
+    if (response.status === 429 || response.status >= 500) {
+      throw new R.HttpError(503, 'O serviço de rotas está ocupado ou indisponível. Tente novamente em instantes.');
+    }
+    throw new R.HttpError(422, 'Não foi possível encontrar um caminho pelas ruas entre esses endereços.');
+  }
+
+  const result = data.routes[0];
+  const coordinatesOut = result.geometry?.coordinates;
+  if (!Array.isArray(coordinatesOut) || coordinatesOut.length < 2 ||
+      !Number.isFinite(result.distance) || !Number.isFinite(result.duration)) {
+    throw new R.HttpError(502, 'O serviço de rotas retornou um trajeto incompleto.');
+  }
+
+  const output = {
+    provider: 'OSRM',
+    distanceKm: Math.round((result.distance / 1000) * 10) / 10,
+    durationMin: Math.max(1, Math.round(result.duration / 60)),
+    geometry: result.geometry,
+  };
+
+  if (routeCache.size > 300) {
+    for (const [key, value] of routeCache) {
+      if (value.expiresAt <= Date.now()) routeCache.delete(key);
+    }
+    while (routeCache.size > 300) routeCache.delete(routeCache.keys().next().value);
+  }
+  routeCache.set(cacheKey, { data: output, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return output;
 });
 
 route('GET', '/api/config', async () => ({
