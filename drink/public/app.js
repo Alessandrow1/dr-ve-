@@ -263,7 +263,7 @@ function showHome() {
     else S.dest = null;
     S.quote = null;
     paintQuote();
-    map.update({ pickup: null, dest: null });
+    map.update({ pickup: placePoint(S.pickup), dest: placePoint(S.dest) });
 
     const query = input.value.trim();
     if (query.length < 4) {
@@ -284,6 +284,9 @@ function showHome() {
   });
 
   function useGps() {
+    clearTimeout(timers.pickup);
+    controllers.pickup?.abort();
+    quoteRequestId += 1;
     err.textContent = '';
     if (!navigator.geolocation) {
       err.textContent = 'Este aparelho não oferece localização. Digite o endereço de embarque.';
