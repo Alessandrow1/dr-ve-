@@ -607,6 +607,7 @@ export function history(customerId) {
       createdAt: r.createdAt,
       pickup: r.pickup.label,
       destination: r.destination.label,
+      stops: (r.stops || []).map((point) => point.label),
       total: r.state === 'cancelado' ? r.cancel?.fee || 0 : r.quote.total,
       token: r.clientToken, // demo: permite reabrir recibo no mesmo dispositivo
     }));
