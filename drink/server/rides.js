@@ -648,6 +648,7 @@ export function updateLocation(driverId, pos) {
       ride.pickupProgress.lastProgressAt = now();
       persist();
     }
+    if (!ride.pickupProgress.freeCancelReason) pickupCancellationPolicy(ride);
   }
   return d;
 }
