@@ -150,7 +150,7 @@ function showProfile() {
   let photo = me.photo || '';
   const preview = h('div', { style: 'display:flex;justify-content:center;padding:4px 0 8px' });
   const renderPhoto = () => {
-    const initials = String(name.value || me.name || 'Cliente').trim().split(/\\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+    const initials = String(name.value || me.name || 'Cliente').trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
     preview.replaceChildren(photo
       ? h('img', { src: photo, alt: 'Foto do perfil', style: 'width:92px;height:92px;object-fit:cover;border-radius:50%;border:2px solid var(--lime)' })
       : h('div', { class: 'avatar', style: 'width:92px;height:92px;font-size:28px' }, initials || 'CL'));
