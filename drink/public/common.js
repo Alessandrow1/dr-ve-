@@ -160,14 +160,15 @@ export function mapView(cfg) {
 
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
   const tileUrls = {
-    dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
-    light: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+    dark: 'https://tiles.stadiamaps.com/tiles/stamen_toner_dark/{z}/{x}/{y}{r}.png',
+    light: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}{r}.png',
   };
   const tiles = L.tileLayer(tileUrls[getTheme()], {
     maxZoom: 20,
     referrerPolicy: 'strict-origin-when-cross-origin',
     attribution:
       '&copy; <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener">Stadia Maps</a> · ' +
+      '&copy; <a href="https://stamen.com/" target="_blank" rel="noopener">Stamen Design</a> · ' +
       '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · ' +
       '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · ' +
       'Rotas: <a href="https://valhalla.openstreetmap.de/" target="_blank" rel="noopener">Valhalla</a> / ' +
@@ -813,7 +814,7 @@ export function mapView(cfg) {
           setDriverMarker(currentDriverPosition);
           note.textContent = 'CALCULANDO ROTA PELAS RUAS...';
           note.classList.remove('map-note-error');
-          map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 16, animate: true });
+          map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 17, animate: true });
           routeTimer = setTimeout(() => {
             loadRoadRoute(pk, ds, key, requestId, controller);
           }, 450);
@@ -821,7 +822,7 @@ export function mapView(cfg) {
       } else {
         cancelRoute();
         const single = pk || ds;
-        if (single) map.setView([single.lat, single.lng], 16, { animate: true });
+        if (single) map.setView([single.lat, single.lng], 17, { animate: true });
         note.textContent = 'MOSSORÓ · RN';
         note.classList.remove('map-note-error');
       }
