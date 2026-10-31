@@ -21,7 +21,8 @@ async function boot() {
     if (!r) return;
     title.textContent = r.stateLabel;
     const itinerary = [r.pickup.label, ...(r.stops || []).map((point) => point.label), r.destination.label].join(' → ');
-    sub.textContent = `${r.customerFirstName} segue por ${itinerary}, no ${r.vehicle.model} ${r.vehicle.color}.${r.driverFirstName ? ` Motorista: ${r.driverFirstName}.` : ''}`;
+    const stopStatus = r.stops?.length ? ` Paradas concluídas: ${r.completedStops || 0}/${r.stops.length}.` : '';
+    sub.textContent = `${r.customerFirstName} segue por ${itinerary}, no ${r.vehicle.model} ${r.vehicle.color}.${stopStatus}${r.driverFirstName ? ` Motorista: ${r.driverFirstName}.` : ''}`;
     eta.hidden = !r.etaMin; eta.textContent = `~${r.etaMin} min`;
     gpsWarning.hidden = r.driverGpsFresh !== false;
     map.update({
