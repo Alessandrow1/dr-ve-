@@ -13,6 +13,30 @@
   --font: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 * { box-sizing: border-box; }
+
+/* Rolagem discreta, mas sempre identificável e fácil de agarrar. */
+#app, #app * {
+  scrollbar-width: thin;
+  scrollbar-color: #53604e transparent;
+}
+#app *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+#app *::-webkit-scrollbar-track {
+  background: transparent;
+}
+#app *::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: rgba(166, 190, 146, .52);
+  background-clip: padding-box;
+}
+#app *::-webkit-scrollbar-thumb:hover {
+  background: rgba(184, 255, 92, .88);
+  background-clip: padding-box;
+}
 html, body { margin: 0; height: 100%; background: #070707; color: var(--white); font-family: var(--font); -webkit-text-size-adjust: 100%; }
 body { display: flex; justify-content: center; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -210,6 +234,18 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
 }
 
 :root[data-theme="light"] body { background: #edf1ed; color: var(--white); }
+:root[data-theme="light"] #app,
+:root[data-theme="light"] #app * {
+  scrollbar-color: #b7c3b3 transparent;
+}
+:root[data-theme="light"] #app *::-webkit-scrollbar-thumb {
+  background: rgba(83, 112, 69, .42);
+  background-clip: padding-box;
+}
+:root[data-theme="light"] #app *::-webkit-scrollbar-thumb:hover {
+  background: rgba(96, 142, 48, .78);
+  background-clip: padding-box;
+}
 :root[data-theme="light"] #app { background: #ffffff; border-color: #dce4dc; box-shadow: 0 12px 40px rgba(22, 42, 24, .08); }
 :root[data-theme="light"] .demo-bar { background: #a5d66c; color: #172116; }
 :root[data-theme="light"] .demo-bar button { color: #172116; }
