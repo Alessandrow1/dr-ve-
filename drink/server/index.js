@@ -247,7 +247,7 @@ function serveStatic(req, res, pathname) {
     'Cache-Control': 'no-cache',
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy':
-      "default-src 'self'; img-src 'self' data: https://tile.openstreetmap.org https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' https://unpkg.com; connect-src 'self' https://tile.openstreetmap.org; frame-ancestors 'none'",
+      "default-src 'self'; img-src 'self' data: https://tiles.stadiamaps.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' https://unpkg.com; connect-src 'self' https://photon.komoot.io; frame-ancestors 'none'",
   });
   fs.createReadStream(file).pipe(res);
 }
