@@ -165,9 +165,18 @@ async function act(url, body) {
 const navLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=${p.mode || 'driving'}`;
 
 function paintActive(view, ride) {
-  // Só redesenha quando o atendimento muda de fase: o polling não pode apagar o checklist em preenchimento.
+  // O mapa é atualizado a cada consulta, sem redesenhar o checklist em preenchimento.
   const key = `${ride.id}|${ride.state}|${ride.verification?.ok}`;
-  if (view.dataset.key === key) return;
+  const headingToPickup = ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state);
+  if (view.dataset.key === key) {
+    if (view.pickupMap) {
+      view.pickupMap.update({
+        pickup: ride.pickup, dest: ride.destination,
+        driver: ride.driverPosition, driverProgress: ride.driverProgress,
+      });
+    }
+    return;
+  }
   view.dataset.key = key;
   const steps = {
     motorista_encontrado: ['Iniciar deslocamento até o cliente', 'depart', 'Você aceitou. Saia em direção ao carro do cliente.'],
@@ -181,8 +190,22 @@ function paintActive(view, ride) {
     h('p', {}, h('b', {}, `${ride.pickup.label} para ${ride.destination.label}`)),
     h('p', { class: 'muted' }, `${ride.customer.firstName} · ${ride.vehicle.model} ${ride.vehicle.color}, placa ${ride.vehicle.plate} · você recebe ${brl(ride.driverEarning)} (simulado)`));
   const out = [head];
-  const target = ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state) ? ride.pickup : ['servico_iniciado', 'em_andamento'].includes(ride.state) ? ride.destination : null;
-  if (target) out.push(h('a', { class: 'btn ghost', href: navLink({ ...target, mode: ride.state.startsWith('motorista') ? 'bicycling' : 'driving' }), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação no app de mapas'));
+  if (headingToPickup) {
+    if (!view.pickupMap) view.pickupMap = mapView(cfg);
+    view.pickupMap.update({
+      pickup: ride.pickup, dest: ride.destination,
+      driver: ride.driverPosition, driverProgress: ride.driverProgress,
+    });
+    out.push(h('div', { class: 'pickup-navigation stack' },
+      h('div', { class: 'banner' }, 'Siga a linha azul tracejada: ela mostra o caminho de bicicleta até o embarque. Sua posição é atualizada pelo GPS e acompanha a rota no mapa.'),
+      view.pickupMap.el,
+      h('a', { class: 'btn ghost', href: navLink({ ...ride.pickup, mode: 'bicycling' }), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação externa (a rota pode variar)')));
+  } else if (view.pickupMap) {
+    view.pickupMap.update({ pickup: null, dest: null, driver: null });
+    view.pickupMap = null;
+  }
+  const target = ['servico_iniciado', 'em_andamento'].includes(ride.state) ? ride.destination : null;
+  if (target) out.push(h('a', { class: 'btn ghost', href: navLink({ ...target, mode: 'driving' }), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação no app de mapas'));
 
   if (ride.state === 'verificacao_pre_servico') out.push(verificationForm(ride));
   else if (steps[ride.state]) {
