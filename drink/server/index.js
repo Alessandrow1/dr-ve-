@@ -27,7 +27,7 @@ const PENDING = [
   'Verificação de CNH junto ao órgão de trânsito e consulta de antecedentes (provedor externo)',
   'Verificação de seguro/responsabilidade civil compatível com o serviço',
   'Provedor de pagamentos real (cartão/Pix) — hoje 100% simulado',
-  'Rotas viárias: primeira integração experimental com OSRM concluída; hospedagem própria e disponibilidade garantida ainda pendentes',
+  'Rotas viárias: OSRM para o trajeto de carro e perfil de bicicleta FOSSGIS para o motorista até o embarque; hospedagem própria e disponibilidade garantida ainda pendentes',
   'Notificações push (FCM/APNs)',
   'Upload e armazenamento seguro de documentos e fotos do veículo',
   'Painel da operação: login individual, permissões por perfil e MFA (hoje: chave única de demonstração); cadastro de novas áreas; cupons e parcerias',
