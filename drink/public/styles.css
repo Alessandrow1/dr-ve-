@@ -153,6 +153,7 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
 
 .drawer-back, .modal-back { position: absolute; inset: 0; background: rgba(0,0,0,.6); z-index: 20; display: flex; }
 .drawer-back { justify-content: flex-start; }
+.drawer-back { z-index: 2000; }
 .drawer { width: 82%; background: var(--graphite); padding: 20px 16px; display: flex; flex-direction: column; gap: 6px; animation: slidein .2s ease; }
 .drawer button.item { min-height: 54px; text-align: left; background: transparent; border: 0; border-radius: 14px; padding: 0 14px; font-size: 17px; font-weight: 600; cursor: pointer; }
 .drawer button.item:hover { background: var(--ink); }
