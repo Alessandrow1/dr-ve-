@@ -157,7 +157,7 @@ function showProfile() {
     onclick: () => file.click(),
   });
   const renderPhoto = () => {
-    const initials = String(name.value || me.name || 'Cliente').trim().split(/\\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+    const initials = String(name.value || me.name || 'Cliente').trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
     preview.replaceChildren(photo
       ? h('img', { src: photo, alt: 'Sua foto de perfil. Toque para alterar.', style: 'display:block;width:92px;height:92px;object-fit:cover;border-radius:50%;border:2px solid var(--lime)' })
       : h('div', { class: 'avatar', style: 'width:92px;height:92px;font-size:28px' }, initials || 'CL'));
