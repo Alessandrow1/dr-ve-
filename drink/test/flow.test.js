@@ -6,7 +6,8 @@ process.env.DEMO_SPEED = '0.01';
 process.env.ADMIN_KEY = 'chave-de-teste';
 
 const { createApp } = await import('../server/index.js');
-const { resetForTests } = await import('../server/store.js');
+const store = await import('../server/store.js');
+const { resetForTests } = store;
 
 let server, base;
 before(async () => {
@@ -163,7 +164,7 @@ test('taxa de cancelamento só após motorista a caminho; gratuito antes', async
   await call('POST', `/api/driver/rides/${b.data.ride.id}/accept`, { headers: D });
   await call('POST', `/api/driver/rides/${b.data.ride.id}/depart`, { headers: D });
   r = await call('POST', `/api/rides/${b.data.ride.id}/cancel`, { headers: Hb });
-  assert.equal(r.data.cancel.fee, 12);
+  assert.equal(r.data.cancel.fee, 8);
   assert.equal(r.data.payment.status, 'taxa_cobrada');
 });
 
@@ -317,3 +318,56 @@ test('motorista simulado atende dois pedidos simultâneos, um de cada vez', asyn
   await until(a.data.ride.id, a.data.token, 'servico_concluido', 30000);
   await until(b.data.ride.id, b.data.token, 'servico_concluido', 30000);
 });
+test('cliente cancela sem custo por falta de avanço ou atraso, com penalidade progressiva ao motorista', async () => {
+  resetForTests();
+
+  async function startedRide() {
+    await call('POST', '/api/driver/online', {
+      headers: D,
+      body: { online: true, pos: { lat: -5.19, lng: -37.341, accuracy: 12 } },
+    });
+    const created = await call('POST', '/api/rides', { body: rideBody() });
+    const H = { 'x-ride-token': created.data.token };
+    const id = created.data.ride.id;
+    await call('POST', `/api/rides/${id}/confirm`, { headers: H });
+    await call('POST', `/api/driver/rides/${id}/accept`, { headers: D });
+    await call('POST', `/api/driver/rides/${id}/depart`, { headers: D });
+    return { id, H };
+  }
+
+  const first = await startedRide();
+  store.db.rides[first.id].pickupProgress.lastProgressAt = Date.now() - 3 * 60 * 1000 - 1000;
+  store.db.drivers.d_rafael.posAt = Date.now();
+  let r = await call('GET', `/api/rides/${first.id}`, { headers: first.H });
+  assert.equal(r.data.cancelPolicy.eligible, true);
+  assert.equal(r.data.cancelPolicy.reason, 'motorista_sem_progresso');
+  r = await call('POST', `/api/rides/${first.id}/cancel`, { headers: first.H });
+  assert.equal(r.data.cancel.fee, 0);
+  assert.equal(r.data.cancel.reason, 'motorista_sem_progresso');
+  assert.equal(store.db.drivers.d_rafael.pickupIssues.length, 1);
+
+  const second = await startedRide();
+  store.db.rides[second.id].pickupProgress.expectedArrivalAt = Date.now() - 5 * 60 * 1000 - 1000;
+  // Sem GPS recente, o critério de atraso continua válido; o critério de parada não.
+  store.db.drivers.d_rafael.posAt = 0;
+  r = await call('GET', `/api/rides/${second.id}`, { headers: second.H });
+  assert.equal(r.data.cancelPolicy.eligible, true);
+  assert.equal(r.data.cancelPolicy.reason, 'motorista_atrasado');
+  r = await call('POST', `/api/rides/${second.id}/cancel`, { headers: second.H });
+  assert.equal(r.data.cancel.fee, 0);
+  assert.equal(r.data.cancel.reason, 'motorista_atrasado');
+  assert.equal(store.db.drivers.d_rafael.pickupIssues.length, 2);
+  assert.equal(store.db.drivers.d_rafael.online, false);
+  assert.ok(store.db.drivers.d_rafael.cooldownUntil > Date.now());
+
+  r = await call('POST', '/api/driver/online', {
+    headers: D,
+    body: { online: true, pos: { lat: -5.19, lng: -37.341, accuracy: 12 } },
+  });
+  assert.equal(r.status, 403, 'motorista com reincidência deve entrar em pausa de 30 minutos');
+
+  const admin = await call('GET', '/api/admin/drivers', { headers: AD });
+  const driver = admin.data.drivers.find((x) => x.id === 'd_rafael');
+  assert.equal(driver.pickupReliability.issues30d, 2);
+});
+
