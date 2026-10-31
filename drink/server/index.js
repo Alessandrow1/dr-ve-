@@ -401,6 +401,7 @@ const driverActions = {
   verification: (id, d) => R.beginVerification(id, d),
   start: (id, d) => R.startService(id, d),
   drive: (id, d) => R.driveRide(id, d),
+  stop: (id, d) => R.completeNextStop(id, d),
   finish: (id, d) => R.finishRide(id, d),
 };
 route('POST', '/api/driver/rides/:id/:action', async (req, _res, p) => {
