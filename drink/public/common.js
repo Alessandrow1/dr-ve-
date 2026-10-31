@@ -202,7 +202,7 @@ export function mapView(cfg) {
     color: '#65B8FF', weight: 5, opacity: 0.95, dashArray: '9 8', lineCap: 'round', lineJoin: 'round',
   });
   map.attributionControl.addAttribution(
-    'Rota de bicicleta: <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">FOSSGIS / OSRM</a>',
+    'Rota de bicicleta: <a href="https://valhalla.openstreetmap.de/" target="_blank" rel="noopener">Valhalla / FOSSGIS</a> · <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">OSRM</a>',
   );
   let lastRouteKey = '';
   let routeRequestId = 0;
@@ -367,7 +367,7 @@ export function mapView(cfg) {
       // fica parado na origem em vez de desenhar um movimento diagonal falso.
       markerPoint = driverRouteSegments.length
         ? driverRoutePointAt(displayedDriverPickupProgress ?? currentDriverPickupProgress)
-        : currentDriverRouteStart || point;
+        : currentDriverRouteStart || null;
     } else if (driverRouteCoordinates.length) {
       markerPoint = nearestPointOnGeometry(point, driverRouteCoordinates);
     }
