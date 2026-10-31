@@ -194,11 +194,28 @@ export function mapView(cfg) {
   const route = L.polyline([], {
     color: '#B8FF5C', weight: 5, opacity: 0.96, lineCap: 'round', lineJoin: 'round',
   });
+  // A rota tracejada azul representa o deslocamento de bicicleta até o embarque.
+  const driverRoute = L.polyline([], {
+    color: '#65B8FF', weight: 5, opacity: 0.95, dashArray: '9 8', lineCap: 'round', lineJoin: 'round',
+  });
+  map.attributionControl.addAttribution(
+    'Rota de bicicleta: <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">FOSSGIS / OSRM</a>',
+  );
   let lastRouteKey = '';
   let routeRequestId = 0;
   let routeController = null;
   let routeTimer = null;
   let routeCoordinates = [];
+  let driverRouteCoordinates = [];
+  let driverRouteKey = '';
+  let driverRouteRequestId = 0;
+  let driverRouteController = null;
+  let driverRouteTimer = null;
+  let lastDriverRouteOrigin = null;
+  let lastDriverRouteDestination = null;
+  let lastDriverRouteRequestedAt = 0;
+  let currentPickupPoint = null;
+  let hasFitDriverRoute = false;
   let routeSegments = [];
   let routeLengthKm = 0;
   let currentDriverPosition = null;
@@ -259,9 +276,146 @@ export function mapView(cfg) {
     driverAnimationFrame = null;
   }
 
+  function nearestPointOnGeometry(point, coordinates, maxDistanceKm = 0.09) {
+    if (!point || !Array.isArray(coordinates) || coordinates.length < 2) return point;
+    const radians = point.lat * Math.PI / 180;
+    const xScale = 111320 * Math.cos(radians);
+    const yScale = 111320;
+    let best = null;
+    let bestDistanceSq = Infinity;
+
+    for (let i = 1; i < coordinates.length; i++) {
+      const a = coordinates[i - 1];
+      const b = coordinates[i];
+      const ax = (Number(a[0]) - point.lng) * xScale;
+      const ay = (Number(a[1]) - point.lat) * yScale;
+      const bx = (Number(b[0]) - point.lng) * xScale;
+      const by = (Number(b[1]) - point.lat) * yScale;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lengthSq = dx * dx + dy * dy;
+      const ratio = lengthSq > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSq)) : 0;
+      const x = ax + dx * ratio;
+      const y = ay + dy * ratio;
+      const distanceSq = x * x + y * y;
+      if (distanceSq < bestDistanceSq) {
+        bestDistanceSq = distanceSq;
+        best = {
+          lat: Number(a[1]) + (Number(b[1]) - Number(a[1])) * ratio,
+          lng: Number(a[0]) + (Number(b[0]) - Number(a[0])) * ratio,
+        };
+      }
+    }
+    return best && Math.sqrt(bestDistanceSq) <= maxDistanceKm * 1000 ? best : point;
+  }
+
   function setDriverMarker(point) {
-    setMarker(driver, point);
+    const snapped = driverRouteCoordinates.length
+      ? nearestPointOnGeometry(point, driverRouteCoordinates)
+      : point;
+    setMarker(driver, snapped);
     if (map.hasLayer(driver)) driver.bringToFront();
+  }
+
+  function clearDriverRoute() {
+    driverRouteRequestId += 1;
+    clearTimeout(driverRouteTimer);
+    driverRouteTimer = null;
+    driverRouteController?.abort();
+    driverRouteController = null;
+    if (map.hasLayer(driverRoute)) map.removeLayer(driverRoute);
+    driverRouteCoordinates = [];
+    driverRouteKey = '';
+    lastDriverRouteOrigin = null;
+    lastDriverRouteDestination = null;
+    hasFitDriverRoute = false;
+    setDriverMarker(currentDriverPosition);
+  }
+
+  async function loadDriverRoadRoute(from, to, key) {
+    driverRouteRequestId += 1;
+    const requestId = driverRouteRequestId;
+    driverRouteController?.abort();
+    const controller = new AbortController();
+    driverRouteController = controller;
+    lastDriverRouteOrigin = { lat: Number(from.lat), lng: Number(from.lng) };
+    lastDriverRouteDestination = { lat: Number(to.lat), lng: Number(to.lng) };
+    lastDriverRouteRequestedAt = Date.now();
+    const params = new URLSearchParams({
+      mode: 'bike',
+      pickupLat: String(Number(from.lat)),
+      pickupLng: String(Number(from.lng)),
+      destLat: String(Number(to.lat)),
+      destLng: String(Number(to.lng)),
+    });
+    try {
+      const response = await fetch(`/api/route?${params.toString()}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível calcular a rota de bicicleta.');
+      if (requestId !== driverRouteRequestId || key !== driverRouteKey) return;
+      const coordinates = data.geometry?.coordinates;
+      if (!Array.isArray(coordinates) || coordinates.length < 2) {
+        throw new Error('O serviço de rotas não retornou o caminho do motorista.');
+      }
+      driverRouteCoordinates = coordinates;
+      driverRoute.setLatLngs(coordinates.map(([lng, lat]) => [Number(lat), Number(lng)]));
+      if (!map.hasLayer(driverRoute)) driverRoute.addTo(map);
+      driverRoute.bringToFront();
+      pickup.bringToFront();
+      dest.bringToFront();
+      setDriverMarker(currentDriverPosition);
+      if (!hasFitDriverRoute) {
+        const bounds = driverRoute.getBounds();
+        if (map.hasLayer(route)) bounds.extend(route.getBounds());
+        map.fitBounds(bounds.pad(0.18), { maxZoom: 15, animate: true });
+        hasFitDriverRoute = true;
+      }
+      const distance = Number(data.distanceKm).toFixed(1).replace('.', ',');
+      const duration = Math.max(1, Number(data.durationMin) || 1);
+      note.textContent = `MOTORISTA · BIKE · ${distance} km · ${duration} min`;
+      note.classList.remove('map-note-error');
+    } catch (error) {
+      if (error.name === 'AbortError' || requestId !== driverRouteRequestId) return;
+      console.warn('[map] falha ao calcular rota de bicicleta:', error);
+      note.textContent = 'ROTA DO MOTORISTA INDISPONÍVEL';
+      note.classList.add('map-note-error');
+    }
+  }
+
+  function scheduleDriverRoadRoute(from, to) {
+    if (!from || !to) {
+      clearDriverRoute();
+      return;
+    }
+    if (haversineKm(from, to) <= 0.08) {
+      clearDriverRoute();
+      return;
+    }
+    const moved = !lastDriverRouteOrigin ||
+      haversineKm(lastDriverRouteOrigin, from) >= 0.025 ||
+      !lastDriverRouteDestination ||
+      haversineKm(lastDriverRouteDestination, to) >= 0.02;
+    if (!moved || driverRouteTimer) return;
+
+    const waitMs = Math.max(0, 4500 - (Date.now() - lastDriverRouteRequestedAt));
+    driverRouteTimer = setTimeout(() => {
+      driverRouteTimer = null;
+      const latestFrom = currentDriverPosition;
+      const latestTo = currentPickupPoint;
+      if (!latestFrom || !latestTo || haversineKm(latestFrom, latestTo) <= 0.08) {
+        clearDriverRoute();
+        return;
+      }
+      const nextKey = [
+        Number(latestFrom.lat).toFixed(5), Number(latestFrom.lng).toFixed(5),
+        Number(latestTo.lat).toFixed(5), Number(latestTo.lng).toFixed(5),
+      ].join(',');
+      driverRouteKey = nextKey;
+      loadDriverRoadRoute(latestFrom, latestTo, nextKey);
+    }, waitMs);
   }
 
   function showDriverProgress(progress, animate = false) {
@@ -387,6 +541,7 @@ export function mapView(cfg) {
     el,
     update({ pickup: pk, dest: ds, driver: dr, driverProgress: progress }) {
       currentDriverPosition = dr || null;
+      currentPickupPoint = pk || null;
       const previousProgress = currentDriverProgress;
       currentDriverProgress = progress == null || !Number.isFinite(Number(progress))
         ? null
@@ -398,6 +553,8 @@ export function mapView(cfg) {
         currentDriverProgress,
         previousProgress != null && currentDriverProgress != null && currentDriverProgress > previousProgress,
       );
+      if (currentDriverPosition && pk) scheduleDriverRoadRoute(currentDriverPosition, pk);
+      else clearDriverRoute();
 
       if (pk && ds) {
         const points = [[Number(pk.lat), Number(pk.lng)], [Number(ds.lat), Number(ds.lng)]];
