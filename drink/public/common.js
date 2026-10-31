@@ -400,7 +400,9 @@ export function mapView(cfg) {
       haversineKm(lastDriverRouteDestination, to) >= 0.02;
     if (!moved || driverRouteTimer) return;
 
-    const waitMs = Math.max(0, 4500 - (Date.now() - lastDriverRouteRequestedAt));
+    const waitMs = lastDriverRouteRequestedAt
+      ? Math.max(0, 4500 - (Date.now() - lastDriverRouteRequestedAt))
+      : 0;
     driverRouteTimer = setTimeout(() => {
       driverRouteTimer = null;
       const latestFrom = currentDriverPosition;
