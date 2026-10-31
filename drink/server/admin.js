@@ -138,6 +138,8 @@ export function metrics() {
   const refunds = r2(-db.transactions.filter((t) => t.type === 'reembolso').reduce((s, t) => s + t.amount, 0));
   const fees = r2(db.transactions.filter((t) => t.type === 'comissao_plataforma').reduce((s, t) => s + t.amount, 0));
   const drivers = Object.values(db.drivers).filter((d) => !d.isBot);
+  const scores = done.map((r) => Number(r.rating?.stars)).filter((stars) => Number.isInteger(stars) && stars >= 1 && stars <= 5);
+  const ratingDistribution = Object.fromEntries([1, 2, 3, 4, 5].map((stars) => [stars, scores.filter((score) => score === stars).length]));
   return {
     demo: true,
     rides: { total: rides.length, active: rides.filter(isActive).length, completed: done.length, cancelled: cancelled.length },
@@ -153,6 +155,11 @@ export function metrics() {
     drivers: {
       total: drivers.length, online: drivers.filter((d) => d.online).length,
       pending: drivers.filter((d) => d.status === 'em_analise').length,
+    },
+    ratings: {
+      total: scores.length,
+      average: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length * 10) / 10 : null,
+      distribution: ratingDistribution,
     },
     openIncidents: db.incidents.filter((i) => i.status !== 'resolvido').length,
   };
