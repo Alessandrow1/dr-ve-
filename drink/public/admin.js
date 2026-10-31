@@ -14,10 +14,10 @@ let badges = {};
 const DRIVER_STATUS = { aprovado: 'Aprovado', em_analise: 'Em análise', reprovado: 'Reprovado', suspenso: 'Suspenso' };
 const COMPLIANCE = { demo: 'demo', pendente_verificacao: 'pendente' };
 const TX = { autorizacao: 'Autorização', autorizacao_cancelada: 'Autorização cancelada', cobranca: 'Cobrança', taxa_cancelamento: 'Taxa de cancelamento', comissao_plataforma: 'Comissão da plataforma', repasse_motorista: 'Repasse ao motorista', reembolso: 'Reembolso' };
-const KIND = { emergencia: 'Emergência', acidente: 'Acidente', avaria: 'Avaria', conduta: 'Conduta', cobranca: 'Cobrança', outro: 'Outro', equipamento_inviavel: 'Equipamento inviável', pin_invalido_reiterado: 'Código inválido (3x)' };
+const KIND = { emergencia: 'Emergência', acidente: 'Acidente', avaria: 'Avaria', conduta: 'Conduta', cobranca: 'Cobrança', outro: 'Outro', equipamento_inviavel: 'Equipamento inviável', pin_invalido_reiterado: 'Código inválido (3x)', motorista_sem_progresso: 'Motorista sem avanço', motorista_atrasado: 'Motorista atrasado' };
 const PAY = { nao_autorizado: 'Não autorizado', autorizado: 'Autorizado', pago: 'Pago', taxa_cobrada: 'Taxa cobrada', cancelado: 'Sem cobrança', reembolsado: 'Reembolsado' };
 const CANCEL = { cliente: 'Cliente', motorista: 'Motorista', sistema: 'Sistema' };
-const REASON = { equipamento_inviavel: 'Equipamento inviável', falha_verificacao_identidade: 'Falha na verificação', cancelado_pelo_cliente: 'Cancelado pelo cliente' };
+const REASON = { equipamento_inviavel: 'Equipamento inviável', falha_verificacao_identidade: 'Falha na verificação', cancelado_pelo_cliente: 'Cancelado pelo cliente', motorista_sem_progresso: 'Motorista sem avanço', motorista_atrasado: 'Motorista atrasado' };
 
 const table = (heads, rows, empty = 'Nada por aqui ainda.') =>
   rows.length ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' }, h('thead', {}, h('tr', {}, heads.map((x) => h('th', { scope: 'col' }, x)))), h('tbody', {}, rows)))
@@ -101,14 +101,18 @@ async function motoristas(main) {
     td(h('b', {}, d.name)), td(d.publicId), td(h('span', { class: d.status === 'aprovado' ? 'pill lime' : 'pill' }, DRIVER_STATUS[d.status])),
     td(`CNH ${COMPLIANCE[d.compliance.cnh] || d.compliance.cnh} · antecedentes ${COMPLIANCE[d.compliance.antecedentes] || d.compliance.antecedentes} · seguro ${COMPLIANCE[d.compliance.seguro] || d.compliance.seguro}`),
     td(d.application ? `Cat. ${d.application.cnhCategory}, validade ${new Date(d.application.cnhValidity).toLocaleDateString('pt-BR')}, tel. ${d.application.phoneMasked}` : 'Cadastro anterior ao protótipo'),
-    td(`${d.ridesDone} · ${d.rating.toFixed(1).replace('.', ',')}`, 'num'), td(d.online ? 'Online' : 'Offline'),
+    td(`${d.ridesDone} · ${d.rating.toFixed(1).replace('.', ',')}`, 'num'),
+    td(d.pickupReliability?.issues30d
+      ? `${d.pickupReliability.issues30d} alerta(s) em 30 dias${d.pickupReliability.cooldownUntil > Date.now() ? ' · pausa temporária' : ''}`
+      : 'Sem alertas recentes'),
+    td(d.online ? 'Online' : 'Offline'),
     td(h('div', { class: 'row-actions' },
       d.status !== 'aprovado' ? h('button', { class: 'btn small', onclick: () => set(d, 'approve', 'Aprovar') }, 'Aprovar') : null,
       d.status === 'em_analise' ? h('button', { class: 'btn warn small', onclick: () => set(d, 'reject', 'Reprovar') }, 'Reprovar') : null,
       d.status === 'aprovado' ? h('button', { class: 'btn warn small', onclick: () => set(d, 'suspend', 'Suspender') }, 'Suspender') : null))));
   fill(main, head('Motoristas'),
     h('div', { class: 'banner' }, 'Aprovar aqui não comprova habilitação nem seguro. Confira CNH, antecedentes e cobertura por fora do protótipo antes de aprovar, e registre isso no cadastro quando houver provedor para essas verificações.'),
-    table(['Nome', 'ID', 'Situação', 'Verificações', 'Dados enviados', 'Corridas · nota', 'Agora', 'Ações'], rows, 'Nenhum motorista cadastrado.'));
+    table(['Nome', 'ID', 'Situação', 'Verificações', 'Dados enviados', 'Corridas · nota', 'Pontualidade', 'Agora', 'Ações'], rows, 'Nenhum motorista cadastrado.'));
 }
 
 // ---------- corridas ----------
