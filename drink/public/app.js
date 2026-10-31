@@ -544,7 +544,7 @@ const HINT = {
   aguardando_confirmacao: 'Seu pedido ainda não foi confirmado. Confirme para procurar um motorista.',
   procurando_motorista: 'Estamos avisando os motoristas disponíveis perto de você.',
   motorista_encontrado: 'Ele vai sair em direção ao seu carro.',
-  motorista_a_caminho: 'Ele chega de bicicleta ou scooter dobrável. Fique perto do carro.',
+  motorista_a_caminho: 'Ele chega de bicicleta ou scooter dobrável. Se ficar 3 minutos sem avançar com GPS ativo ou passar 5 minutos da previsão, você poderá cancelar sem cobrança.',
   motorista_chegou: 'Confira nome e identificação antes de entregar a chave.',
   verificacao_pre_servico: 'Ele confere você, o carro e o equipamento. Só informe o código quando a identificação bater.',
   servico_iniciado: 'Tudo certo. Coloque o cinto.',
@@ -562,7 +562,7 @@ async function showTracking() {
     if (!ride) return;
     S.ride = ride;
     if (isTerminal(ride)) { stopLive(); return ride.state === 'servico_concluido' ? showFinished() : showCancelled(); }
-    const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.verificationOk]);
+    const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.verificationOk, ride.cancelPolicy?.reason]);
     map.update({ pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition, driverProgress: ride.driverProgress });
     if (key === shown) return; shown = key;
     const idx = FLOW.indexOf(ride.state);
@@ -572,6 +572,7 @@ async function showTracking() {
       h('p', { class: 'muted' }, HINT[ride.state]),
       ride.etaMin ? h('span', { class: 'pill lime', style: 'align-self:flex-start;width:fit-content' }, ride.state === 'em_andamento' ? `Chegada em ~${ride.etaMin} min` : `Chega em ~${ride.etaMin} min`) : null,
       h('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.max(0, Math.round(((idx + 1) / FLOW.length) * 100))) }, h('i', { style: `width:${Math.max(4, ((idx + 1) / FLOW.length) * 100)}%` })),
+      ride.cancelPolicy?.reason ? h('div', { class: 'banner' }, ride.cancelPolicy.reason === 'motorista_sem_progresso' ? 'Você pode cancelar sem custo: o GPS não registrou avanço do motorista por 3 minutos.' : 'Você pode cancelar sem custo: a previsão de chegada foi ultrapassada em mais de 5 minutos.') : null,
       d ? h('div', { class: 'card row' },
         h('div', { class: 'avatar', 'aria-hidden': 'true' }, d.name.split(' ').map((x) => x[0]).slice(0, 2).join('')),
         h('div', { style: 'flex:1' }, h('b', {}, d.name), h('p', { class: 'muted' }, `${d.transport} · ID ${d.publicId}`),
@@ -589,8 +590,16 @@ async function showTracking() {
   };
 
   async function cancel(ride) {
-    const fee = ride.currentCancelFee;
-    if (!confirm(fee > 0 ? `Cancelar agora gera uma taxa de ${brl(fee)}. Deseja cancelar?` : 'Cancelar esta solicitação sem custo?')) return;
+    const policy = ride.cancelPolicy || { fee: ride.currentCancelFee || 0 };
+    const fee = policy.fee ?? ride.currentCancelFee ?? 0;
+    const message = policy.reason === 'motorista_sem_progresso'
+      ? 'O motorista ficou 3 minutos sem avançar. Você pode cancelar sem custo. Deseja cancelar?'
+      : policy.reason === 'motorista_atrasado'
+        ? 'O motorista ultrapassou a previsão em mais de 5 minutos. Você pode cancelar sem custo. Deseja cancelar?'
+        : fee > 0
+          ? `Cancelar agora gera uma taxa de ${brl(fee)}. Deseja cancelar?`
+          : 'Cancelar esta solicitação sem custo?';
+    if (!confirm(message)) return;
     try { paint(await api('POST', `/api/rides/${ride.id}/cancel`, { headers: authH() })); } catch (e) { toast(root, e.message); }
   }
   const refresh = async () => {
