@@ -365,7 +365,6 @@ function showHome() {
             h('span', { class: 'address-dot destination-dot', 'aria-hidden': 'true' }),
             destInput)),
         destResults),
-      h('p', { class: 'muted small address-provider-note' }, 'Busca de endereços por Photon / OpenStreetMap. O número pode não estar mapeado com precisão.'),
       err, quoteBox, h('div', { class: 'cta-bar' }, cta))));
   paintQuote();
 }
