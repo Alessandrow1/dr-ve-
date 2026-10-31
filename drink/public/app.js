@@ -462,7 +462,7 @@ async function showTracking() {
     S.ride = ride;
     if (isTerminal(ride)) { stopLive(); return ride.state === 'servico_concluido' ? showFinished() : showCancelled(); }
     const key = JSON.stringify([ride.state, ride.etaMin, ride.pin, ride.driver?.id, ride.verificationOk]);
-    map.update({ pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition });
+    map.update({ pickup: ride.pickup, dest: ride.destination, driver: ride.driverPosition, driverProgress: ride.driverProgress });
     if (key === shown) return; shown = key;
     const idx = FLOW.indexOf(ride.state);
     const d = ride.driver;
