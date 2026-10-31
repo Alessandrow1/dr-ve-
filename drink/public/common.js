@@ -363,7 +363,10 @@ export function mapView(cfg) {
     if (!routeCoordinates.length) return [];
     const amount = Math.max(0, Math.min(1, Number(progress) || 0));
     if (amount <= 0) return routeCoordinates;
-    if (amount >= 0.99999) return [];
+    if (amount >= 0.99999) {
+      const last = routeCoordinates[routeCoordinates.length - 1];
+      return last ? [last] : [];
+    }
 
     const targetKm = amount * routeLengthKm;
     for (const segment of routeSegments) {
