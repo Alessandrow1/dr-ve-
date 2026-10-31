@@ -20,11 +20,12 @@ async function boot() {
   const paint = (r) => {
     if (!r) return;
     title.textContent = r.stateLabel;
-    sub.textContent = `${r.customerFirstName} segue de ${r.pickup.label} para ${r.destination.label}, no ${r.vehicle.model} ${r.vehicle.color}.${r.driverFirstName ? ` Motorista: ${r.driverFirstName}.` : ''}`;
+    const itinerary = [r.pickup.label, ...(r.stops || []).map((point) => point.label), r.destination.label].join(' → ');
+    sub.textContent = `${r.customerFirstName} segue por ${itinerary}, no ${r.vehicle.model} ${r.vehicle.color}.${r.driverFirstName ? ` Motorista: ${r.driverFirstName}.` : ''}`;
     eta.hidden = !r.etaMin; eta.textContent = `~${r.etaMin} min`;
     gpsWarning.hidden = r.driverGpsFresh !== false;
     map.update({
-      pickup: r.pickup, dest: r.destination, driver: r.driverPosition, state: r.state,
+      pickup: r.pickup, dest: r.destination, stops: r.stops, driver: r.driverPosition, state: r.state,
       driverProgress: r.driverProgress, driverPickupProgress: r.driverPickupProgress,
       driverRouteStart: r.driverRouteStart,
     });
