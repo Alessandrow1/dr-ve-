@@ -345,7 +345,7 @@ export function view(ride, role) {
     rating: Math.round(d.rating * 10) / 10,
     ratingsCount: d.ratingsCount,
     transport: d.transport,
-    photoUrl: null, // foto real depende de upload + verificação de identidade (pendente)
+    photoUrl: d.photoUrl || null,
     verification: d.isBot ? 'simulado' : 'demo',
   };
   if (role === 'driver') {
