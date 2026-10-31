@@ -98,7 +98,6 @@ route('GET', '/api/geocode', async (req) => {
   upstream.searchParams.set('lon', String(SERVICE_AREA.center.lng));
   upstream.searchParams.set('zoom', '14');
   upstream.searchParams.set('limit', '8');
-
   let response;
   try {
     response = await fetch(upstream, {
