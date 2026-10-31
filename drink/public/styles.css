@@ -306,3 +306,37 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
 .cancel-result-page .cancel-summary { text-align: left; grid-template-columns: minmax(0, 1fr); gap: 7px; }
 .cancel-result-page .cancel-summary p { margin-top: 0; }
 .cancel-result-page .cancel-trip { text-align: left; }
+
+
+/* Navegação do motorista até o embarque */
+.map-route-legend {
+  position: absolute;
+  z-index: 660;
+  left: 12px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(78%, 320px);
+  padding: 8px 11px;
+  border: 1px solid rgba(101, 184, 255, .5);
+  border-radius: 12px;
+  background: rgba(10, 18, 28, .92);
+  color: #eaf5ff;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  font-size: 11px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.map-route-legend[hidden] { display: none; }
+.bike-route-swatch {
+  display: block;
+  width: 28px;
+  height: 0;
+  flex: none;
+  border-top: 4px dashed #65B8FF;
+}
+.pickup-navigation { gap: 10px; }
+.pickup-navigation .mapwrap { min-height: 250px; height: 34dvh; max-height: 360px; border-radius: 20px; overflow: hidden; }
+.pickup-navigation .mapwrap .leaflet-map { min-height: 250px; height: 100%; }
+.pickup-navigation .banner { margin: 0; }
