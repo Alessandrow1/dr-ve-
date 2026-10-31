@@ -197,7 +197,7 @@ function positionInfo(ride) {
   const start = ride.driverStart || d.pos;
   switch (ride.state) {
     case 'motorista_encontrado':
-      return { pos: start, etaMin: q.etaMin };
+      return { pos: start, etaMin: ride.pickupProgress?.etaOriginalMin ?? q.etaMin };
     case 'motorista_a_caminho': {
       if (fresh) {
         const km = roadKm(d.pos, ride.pickup);
@@ -652,6 +652,7 @@ export function acceptRide(id, driverId) {
   ride.pickupProgress = {
     acceptedAt,
     expectedArrivalAt: acceptedAt + etaMin * 60 * 1000,
+    etaOriginalMin: etaMin,
     lastProgressAt: acceptedAt,
     closestDistanceKm: haversineKm(d.pos, ride.pickup),
   };
@@ -690,6 +691,7 @@ export function departRide(id, driverId) {
     ride.pickupProgress = {
       acceptedAt: startedAt,
       expectedArrivalAt: startedAt + Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60)) * 60 * 1000,
+      etaOriginalMin: Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60)),
       lastProgressAt: startedAt,
       closestDistanceKm: haversineKm(d.pos, ride.pickup),
     };
