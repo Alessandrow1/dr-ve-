@@ -51,8 +51,13 @@ async function continueBot(rideId) {
           action = () => R.driveRide(rideId, BOT);
           break;
         case 'em_andamento':
-          waitMs = 12500;
-          action = () => R.finishRide(rideId, BOT);
+          if ((ride.completedStops || 0) < (ride.stops || []).length) {
+            waitMs = 5000;
+            action = () => R.completeNextStop(rideId, BOT);
+          } else {
+            waitMs = 12500;
+            action = () => R.finishRide(rideId, BOT);
+          }
           break;
         default:
           return;
