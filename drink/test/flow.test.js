@@ -394,9 +394,8 @@ test('cliente cancela sem custo por falta de avanço ou atraso, com penalidade p
   const driver = admin.data.drivers.find((x) => x.id === 'd_rafael');
   assert.equal(driver.pickupReliability.issues30d, 2);
 
-  // Após análise da operação, uma nova reincidência leva o cadastro para revisão.
-  r = await call('POST', '/api/admin/drivers/d_rafael/approve', { headers: AD });
-  assert.equal(r.status, 200);
+  // Simula o fim da pausa de 30 minutos; a terceira ocorrência em 30 dias leva à revisão.
+  store.db.drivers.d_rafael.cooldownUntil = Date.now() - 1;
   const third = await startedRide();
   store.db.rides[third.id].pickupProgress.lastProgressAt = Date.now() - 3 * 60 * 1000 - 1000;
   store.db.drivers.d_rafael.posAt = Date.now();
