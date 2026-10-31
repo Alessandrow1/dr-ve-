@@ -549,7 +549,7 @@ function requireDriver(driverId) {
 
 export function openRequests(driverId) {
   const d = requireDriver(driverId);
-  if (!d.online || d.status !== 'aprovado') return [];
+  if (!d.online || d.status !== 'aprovado' || d.cooldownUntil > now()) return [];
   return Object.values(db.rides)
     .filter((r) => r.state === 'procurando_motorista' && !r.declinedBy.includes(driverId) && !r.demoAuto)
     .map((r) => {
@@ -622,6 +622,10 @@ export function acceptRide(id, driverId) {
   const ride = getRide(id);
   const d = requireDriver(driverId);
   requireState(ride, ['procurando_motorista'], 'Esta solicitação não está mais disponível.');
+  if (d.cooldownUntil > now()) {
+    const remaining = Math.ceil((d.cooldownUntil - now()) / 60000);
+    throw new HttpError(403, `Pausa temporária por cancelamentos repetidos. Tente novamente em ${remaining} min.`);
+  }
   if (d.status !== 'aprovado') throw new HttpError(403, 'Cadastro não aprovado.');
   if (!d.isBot && !d.online) throw new HttpError(409, 'Fique online para aceitar solicitações.');
   if (driverActiveRide(driverId)) throw new HttpError(409, 'Você já tem um atendimento em andamento.');
