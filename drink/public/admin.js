@@ -70,8 +70,12 @@ const demoNote = () => h('div', { class: 'banner' }, 'Dados de demonstração. V
 // ---------- indicadores ----------
 async function indicadores(main) {
   const m = await A('GET', '/metrics');
-  const max = Math.max(1, ...m.byHour);
-  const reasons = Object.entries(m.cancelReasons);
+  const max = Math.max(1, ...(m.byHour || []));
+  const reasons = Object.entries(m.cancelReasons || {});
+  const ratings = m.ratings || {};
+  const ratingDistribution = ratings.distribution || {};
+  const ratingTotal = Number(ratings.total) || 0;
+  const ratingAverage = Number.isFinite(Number(ratings.average)) ? Number(ratings.average) : null;
   fill(main, head('Indicadores', h('button', { class: 'btn ghost small', onclick: start }, 'Atualizar')), demoNote(),
     h('div', { class: 'cards' },
       stat('Corridas', m.rides.total, pl(m.rides.active, 'em andamento', 'em andamento')),
@@ -83,8 +87,8 @@ async function indicadores(main) {
       stat('Ocorrências abertas', m.openIncidents)),
     h('h2', {}, 'Experiência do cliente'),
     h('div', { class: 'cards' },
-      stat('Nota média', m.ratings.average == null ? 'sem dados' : `${m.ratings.average.toFixed(1)} / 5`, `${m.ratings.total} avaliações`),
-      ...[5, 4, 3, 2, 1].map((stars) => stat(`${stars} estrelas`, m.ratings.distribution[stars] || 0, 'avaliações'))),
+      stat('Nota média', ratingAverage == null ? 'sem dados' : `${ratingAverage.toFixed(1)} / 5`, `${ratingTotal} avaliações`),
+      ...[5, 4, 3, 2, 1].map((stars) => stat(`${stars} estrelas`, ratingDistribution[stars] || 0, 'avaliações'))),
     h('h2', {}, 'Financeiro (simulado)'),
     h('div', { class: 'cards' }, stat('Cobrado', brl(m.money.gross)), stat('Reembolsos', brl(m.money.refunds)), stat('Líquido', brl(m.money.net)), stat('Comissão da plataforma', brl(m.money.platformFees))),
     h('h2', {}, 'Pedidos por hora do dia'),
