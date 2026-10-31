@@ -73,7 +73,72 @@ function rateLimited(ip) {
 
 const header = (req, k) => String(req.headers[k] || '');
 
+const geocodeCache = new Map();
+
 // ---- rotas ----
+route('GET', '/api/geocode', async (req) => {
+  const requestUrl = new URL(req.url, 'http://localhost');
+  const query = String(requestUrl.searchParams.get('q') || '').trim();
+  if (query.length < 4 || query.length > 160) {
+    throw new R.HttpError(422, 'Digite pelo menos 4 caracteres para buscar o endereço.');
+  }
+
+  const cacheKey = query.toLocaleLowerCase('pt-BR');
+  const cached = geocodeCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  const upstream = new URL('https://photon.komoot.io/api/');
+  upstream.searchParams.set('q', query + ', Mossoró, Rio Grande do Norte, Brasil');
+  upstream.searchParams.set('lat', String(SERVICE_AREA.center.lat));
+  upstream.searchParams.set('lon', String(SERVICE_AREA.center.lng));
+  upstream.searchParams.set('zoom', '14');
+  upstream.searchParams.set('limit', '8');
+  upstream.searchParams.set('lang', 'pt');
+
+  let response;
+  try {
+    response = await fetch(upstream, {
+      headers: {
+        Accept: 'application/geo+json, application/json',
+        'User-Agent': 'DrinkPrototype/0.1 (local development address lookup)',
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+  } catch (error) {
+    console.error('[geocode] falha de conexão com Photon:', error.message);
+    throw new R.HttpError(502, 'Não foi possível conectar ao serviço de endereços. Verifique sua internet e tente novamente.');
+  }
+
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => '')).replace(/\\s+/g, ' ').slice(0, 160);
+    const message = response.status === 429
+      ? 'O serviço de endereços limitou temporariamente as consultas. Aguarde alguns instantes.'
+      : response.status === 403
+        ? 'O serviço de endereços recusou a consulta temporariamente.'
+        : 'O serviço de endereços respondeu com erro HTTP ' + response.status + '.';
+    console.error('[geocode] Photon HTTP', response.status, detail);
+    throw new R.HttpError(502, message);
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new R.HttpError(502, 'O serviço de endereços enviou uma resposta inválida.');
+  }
+  if (!data || !Array.isArray(data.features)) {
+    throw new R.HttpError(502, 'A resposta do serviço de endereços está em formato inesperado.');
+  }
+
+  if (geocodeCache.size > 500) {
+    for (const [key, value] of geocodeCache) {
+      if (value.expiresAt <= Date.now()) geocodeCache.delete(key);
+    }
+    while (geocodeCache.size > 500) geocodeCache.delete(geocodeCache.keys().next().value);
+  }
+  geocodeCache.set(cacheKey, { data, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return data;
+});
 const routes = [];
 const route = (method, pattern, handler) =>
   routes.push({ method, re: new RegExp('^' + pattern.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), handler });
