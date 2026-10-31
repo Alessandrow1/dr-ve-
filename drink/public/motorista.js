@@ -173,6 +173,8 @@ function paintActive(view, ride) {
       view.pickupMap.update({
         pickup: ride.pickup, dest: ride.destination,
         driver: ride.driverPosition, driverProgress: ride.driverProgress,
+      driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
+        driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
       });
     }
     return;
