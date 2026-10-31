@@ -11,16 +11,18 @@ async function boot() {
   const title = h('h1', {});
   const sub = h('p', { class: 'muted' });
   const eta = h('span', { class: 'pill lime', hidden: true });
+  const gpsWarning = h('p', { class: 'muted small', hidden: true }, 'A localização do motorista parou de atualizar. O mapa mostra a última posição recebida.');
   root.replaceChildren(
     h('div', { class: 'demo-bar' }, h('span', {}, 'Acompanhamento de demonstração')),
     h('header', { class: 'topbar' }, h('div', { class: 'logo' }, h('img', { src: '/logo.svg', alt: '' }), h('span', {}, 'Dr', h('span', { class: 'bang' }, '!'), 'nk'))),
-    h('main', { class: 'screen' }, map.el, h('section', { class: 'sheet stack' }, title, sub, eta,
+    h('main', { class: 'screen' }, map.el, h('section', { class: 'sheet stack' }, title, sub, eta, gpsWarning,
       h('p', { class: 'muted small' }, 'Você recebeu este link porque alguém compartilhou a viagem com você. Em risco imediato, ligue 190 ou 192.'))));
   const paint = (r) => {
     if (!r) return;
     title.textContent = r.stateLabel;
     sub.textContent = `${r.customerFirstName} segue de ${r.pickup.label} para ${r.destination.label}, no ${r.vehicle.model} ${r.vehicle.color}.${r.driverFirstName ? ` Motorista: ${r.driverFirstName}.` : ''}`;
     eta.hidden = !r.etaMin; eta.textContent = `~${r.etaMin} min`;
+    gpsWarning.hidden = r.driverGpsFresh !== false;
     map.update({ pickup: r.pickup, dest: r.destination, driver: r.driverPosition, driverProgress: r.driverProgress });
   };
   const load = async () => { try { paint(await api('GET', `/api/share/${token}`)); } catch (e) { if (e.status === 404) fail(e.message); } };
