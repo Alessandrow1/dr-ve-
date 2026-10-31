@@ -173,6 +173,7 @@ function paintActive(view, ride) {
   // O mapa é atualizado a cada consulta, sem redesenhar o checklist em preenchimento.
   const key = `${ride.id}|${ride.state}|${ride.verification?.ok}|${ride.completedStops || 0}`;
   const headingToPickup = ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state);
+  const showingCustomerTrip = ['servico_iniciado', 'em_andamento'].includes(ride.state);
   if (view.dataset.key === key) {
     if (view.pickupMap) {
       view.pickupMap.update({
@@ -197,7 +198,7 @@ function paintActive(view, ride) {
     ride.stops?.length ? h('p', { class: 'muted' }, `Paradas previstas: ${ride.stops.map((point) => point.label).join(' · ')} · 5 min de espera estimada por parada`) : null,
     h('p', { class: 'muted' }, `${ride.customer.firstName} · ${ride.vehicle.model} ${ride.vehicle.color}, placa ${ride.vehicle.plate} · você recebe ${brl(ride.driverEarning)} (simulado)`));
   const out = [head];
-  if (headingToPickup) {
+  if (headingToPickup || showingCustomerTrip) {
     if (!view.pickupMap) view.pickupMap = mapView(cfg);
     view.pickupMap.update({
       pickup: ride.pickup, dest: ride.destination, stops: ride.stops, state: ride.state,
@@ -205,9 +206,13 @@ function paintActive(view, ride) {
       driverPickupProgress: ride.driverPickupProgress, driverRouteStart: ride.driverRouteStart,
     });
     out.push(h('div', { class: 'pickup-navigation stack' },
-      h('div', { class: 'banner' }, 'Siga a linha azul tracejada: ela mostra o caminho de bicicleta até o embarque. Sua posição é atualizada pelo GPS e acompanha a rota no mapa.'),
+      h('div', { class: 'banner' }, headingToPickup
+        ? 'Siga a linha da bicicleta até o embarque. Sua posição é atualizada pelo GPS.'
+        : 'Siga o trajeto de carro no mapa. As paradas intermediárias estão marcadas em amarelo.'),
       view.pickupMap.el,
-      h('a', { class: 'btn ghost', href: navLink({ ...ride.pickup, mode: 'bicycling' }), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação externa (a rota pode variar)')));
+      headingToPickup
+        ? h('a', { class: 'btn ghost', href: navLink({ ...ride.pickup, mode: 'bicycling' }), target: '_blank', rel: 'noopener', style: 'display:grid;place-items:center;text-decoration:none' }, 'Abrir navegação externa (a rota pode variar)')
+        : null));
   } else if (view.pickupMap) {
     view.pickupMap.update({ pickup: null, dest: null, driver: null });
     view.pickupMap = null;
