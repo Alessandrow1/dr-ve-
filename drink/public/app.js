@@ -535,18 +535,21 @@ function showHome() {
     const q = S.quote;
     cta.disabled = !q;
     if (!q) { quoteBox.replaceChildren(); return; }
-    quoteBox.replaceChildren(h('div', { class: 'row between' },
-      h('div', {}, h('div', { class: 'price' }, brl(q.total), h('small', {}, 'estimativa')),
-        h('p', { class: 'muted' }, km(q.distanceKm) + ' · cerca de ' + q.durationMin + ' min de viagem'),
-        q.stopsCount ? h('p', { class: 'muted small' }, `${q.stopsCount} ${q.stopsCount === 1 ? 'parada' : 'paradas'} · inclui ${q.stopWaitMin} min de espera estimada`) : null),
-      h('div', { style: 'text-align:right' },
-        h('span', { class: 'pill lime' }, 'Chega em ~' + q.etaMin + ' min'),
-        q.etaEstimated ? h('p', { class: 'muted small' }, 'tempo estimado') : null),
-      h('details', { class: 'quote-breakdown' },
-        h('summary', {}, 'Ver detalhamento do preço'),
-        h('table', { class: 'lines' }, h('tbody', {},
-          q.lines.map((line) => h('tr', {}, h('td', {}, line.label), h('td', {}, brl(line.amount)))),
-          h('tr', { class: 'total' }, h('td', {}, 'Total estimado'), h('td', {}, brl(q.total)))))));
+    const breakdown = h('details', { class: 'quote-breakdown' },
+      h('summary', {}, 'Ver detalhamento do preço'),
+      h('table', { class: 'lines' }, h('tbody', {},
+        q.lines.map((line) => h('tr', {}, h('td', {}, line.label), h('td', {}, brl(line.amount)))),
+        h('tr', { class: 'total' }, h('td', {}, 'Total estimado'), h('td', {}, brl(q.total))))));
+    quoteBox.replaceChildren(
+      h('div', { class: 'row between' },
+        h('div', {},
+          h('div', { class: 'price' }, brl(q.total), h('small', {}, 'estimativa')),
+          h('p', { class: 'muted' }, km(q.distanceKm) + ' · cerca de ' + q.durationMin + ' min de viagem'),
+          q.stopsCount ? h('p', { class: 'muted small' }, `${q.stopsCount} ${q.stopsCount === 1 ? 'parada' : 'paradas'} · inclui ${q.stopWaitMin} min de espera estimada`) : null),
+        h('div', { style: 'text-align:right' },
+          h('span', { class: 'pill lime' }, 'Chega em ~' + q.etaMin + ' min'),
+          q.etaEstimated ? h('p', { class: 'muted small' }, 'tempo estimado') : null)),
+      breakdown);
   }
 
   async function refresh() {
