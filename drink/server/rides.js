@@ -66,11 +66,12 @@ function pickupCancellationPolicy(ride, at = now()) {
   if (driver && !driver.isBot && progress) {
     const lateOnArrival = Boolean(progress.lateArrivalAt) &&
       ['motorista_chegou', 'verificacao_pre_servico'].includes(ride.state);
-    const lateOnTheWay = ride.state === 'motorista_a_caminho' &&
+    const headingToPickup = ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state);
+    const lateOnTheWay = headingToPickup &&
       Number.isFinite(progress.expectedArrivalAt) &&
       at >= progress.expectedArrivalAt + PICKUP_LATE_GRACE_MS;
     const gpsIsFresh = Boolean(driver.posAt) && at - driver.posAt <= PICKUP_GPS_FRESH_MS;
-    const stoppedWithoutProgress = ride.state === 'motorista_a_caminho' &&
+    const stoppedWithoutProgress = headingToPickup &&
       gpsIsFresh && Number.isFinite(progress.lastProgressAt) &&
       at - progress.lastProgressAt >= PICKUP_NO_PROGRESS_MS;
 
@@ -605,7 +606,7 @@ export function updateLocation(driverId, pos) {
   d.posAt = now();
 
   const ride = driverActiveRide(driverId);
-  if (ride?.state === 'motorista_a_caminho' && ride.pickupProgress) {
+  if (ride && ['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state) && ride.pickupProgress) {
     const distanceKm = haversineKm(d.pos, ride.pickup);
     const accuracyKm = Math.max(0, Math.min(0.15, ((d.posAccuracy || 25) + 25) / 1000));
     const movementThresholdKm = Math.max(0.05, accuracyKm);
@@ -631,7 +632,16 @@ export function acceptRide(id, driverId) {
   if (driverActiveRide(driverId)) throw new HttpError(409, 'Você já tem um atendimento em andamento.');
   ride.driverId = driverId;
   ride.driverStart = { ...d.pos };
-  go(ride, 'motorista_encontrado', 'motorista', 'aceitar', { driverId });
+  const acceptedAt = now();
+  const distanceKm = roadKm(d.pos, ride.pickup);
+  const etaMin = Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60));
+  ride.pickupProgress = {
+    acceptedAt,
+    expectedArrivalAt: acceptedAt + etaMin * 60 * 1000,
+    lastProgressAt: acceptedAt,
+    closestDistanceKm: haversineKm(d.pos, ride.pickup),
+  };
+  go(ride, 'motorista_encontrado', 'motorista', 'aceitar', { driverId, etaOriginalMin: etaMin });
   return ride;
 }
 
@@ -659,18 +669,18 @@ export function departRide(id, driverId) {
   const ride = getRide(id);
   authDriverFor(ride, driverId);
   requireState(ride, ['motorista_encontrado']);
-  const d = requireDriver(driverId);
-  const startedAt = now();
-  const distanceKm = roadKm(d.pos, ride.pickup);
-  const progressDistanceKm = haversineKm(d.pos, ride.pickup);
-  const etaMin = Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60));
-  ride.pickupProgress = {
-    startedAt,
-    expectedArrivalAt: startedAt + etaMin * 60 * 1000,
-    lastProgressAt: startedAt,
-    closestDistanceKm: progressDistanceKm,
-  };
-  go(ride, 'motorista_a_caminho', 'motorista', 'iniciar_deslocamento', { etaOriginalMin: etaMin });
+  if (!ride.pickupProgress) {
+    const startedAt = now();
+    const distanceKm = roadKm(d.pos, ride.pickup);
+    ride.pickupProgress = {
+      acceptedAt: startedAt,
+      expectedArrivalAt: startedAt + Math.max(1, Math.ceil((distanceKm / tariff().avgBikeKmh) * 60)) * 60 * 1000,
+      lastProgressAt: startedAt,
+      closestDistanceKm: haversineKm(d.pos, ride.pickup),
+    };
+  }
+  ride.pickupProgress.departedAt = now();
+  go(ride, 'motorista_a_caminho', 'motorista', 'iniciar_deslocamento');
   return ride;
 }
 export function arriveRide(id, driverId) {
