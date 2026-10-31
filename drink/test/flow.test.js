@@ -338,7 +338,7 @@ test('ocorrência de emergência ou avaria isenta o motorista da penalidade auto
   const r = await call('POST', `/api/rides/${id}/cancel`, { headers: H });
   assert.equal(r.data.cancel.fee, 0);
   assert.equal(r.data.cancel.driverPenalty, 'justificado_por_ocorrencia');
-  assert.equal(store.db.drivers.d_rafael.pickupIssues || [], []);
+  assert.equal((store.db.drivers.d_rafael.pickupIssues || []).length, 0);
   assert.equal(store.db.drivers.d_rafael.online, true);
 });
 
