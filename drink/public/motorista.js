@@ -188,8 +188,8 @@ function paintActive(view, ride) {
   else if (steps[ride.state]) {
     const [label, action, hint] = steps[ride.state];
     out.push(h('p', { class: 'muted' }, hint));
-    if (ride.state === 'motorista_a_caminho') {
-      out.push(h('div', { class: 'banner' }, 'Mantenha o GPS ativo e siga até o embarque. Sem avanço detectável por 3 minutos ou com atraso superior a 5 minutos da previsão, o cliente poderá cancelar sem custo. Ocorrências e emergências podem ser informadas pelo suporte.'));
+    if (['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state)) {
+      out.push(h('div', { class: 'banner' }, 'A contagem começa no aceite. Mantenha o GPS ativo e siga até o embarque. Sem avanço detectável por 3 minutos ou com atraso superior a 5 minutos da previsão original, o cliente poderá cancelar sem custo. Ocorrências e emergências podem ser informadas pelo suporte.'));
     }
     out.push(h('button', { class: 'btn', onclick: async (e) => { busy(e.currentTarget, true); await act(`/api/driver/rides/${ride.id}/${action}`); } }, label));
     if (['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state)) out.push(h('button', { class: 'btn warn', onclick: async () => { if (confirm('Liberar esta solicitação para outro motorista?')) await act(`/api/driver/rides/${ride.id}/release`); } }, 'Liberar solicitação'));
