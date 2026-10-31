@@ -275,6 +275,23 @@ export function mapView(cfg) {
     marker.setLatLng([Number(point.lat), Number(point.lng)]);
   }
 
+  const stopMarkers = [];
+  function updateStopMarkers(stops = []) {
+    while (stopMarkers.length > stops.length) {
+      const marker = stopMarkers.pop();
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+    }
+    stops.forEach((point, index) => {
+      if (!stopMarkers[index]) {
+        stopMarkers[index] = L.circleMarker([center.lat, center.lng], {
+          radius: 7, color: '#101010', weight: 2, fillColor: '#F4B942', fillOpacity: 1,
+        });
+      }
+      setMarker(stopMarkers[index], point);
+      stopMarkers[index].bringToFront();
+    });
+  }
+
   // Precalcula a extensão da rota para posicionar a simulação ao longo das ruas.
   function buildRouteSegments(coordinates) {
     routeCoordinates = Array.isArray(coordinates) ? coordinates : [];
@@ -778,12 +795,16 @@ export function mapView(cfg) {
 
   requestAnimationFrame(() => requestAnimationFrame(() => map.invalidateSize({ pan: false })));
 
-  async function loadRoadRoute(pk, ds, key, requestId, controller) {
+  async function loadRoadRoute(points, key, requestId, controller) {
+    const pk = points[0];
+    const ds = points[points.length - 1];
+    const stops = points.slice(1, -1);
     const params = new URLSearchParams({
       pickupLat: String(Number(pk.lat)),
       pickupLng: String(Number(pk.lng)),
       destLat: String(Number(ds.lat)),
       destLng: String(Number(ds.lng)),
+      stops: JSON.stringify(stops.map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))),
     });
     try {
       const response = await fetch(`/api/route?${params.toString()}`, {
@@ -837,7 +858,9 @@ export function mapView(cfg) {
 
   return {
     el,
-    update({ pickup: pk, dest: ds, driver: dr, state, driverProgress: progress, driverPickupProgress: pickupProgress, driverRouteStart }) {
+    update({ pickup: pk, dest: ds, stops = [], driver: dr, state, driverProgress: progress, driverPickupProgress: pickupProgress, driverRouteStart }) {
+      const via = Array.isArray(stops) ? stops.filter((point) => point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng))) : [];
+      updateStopMarkers(via);
       const approachingPickup = ['motorista_encontrado', 'motorista_a_caminho'].includes(state);
       const showingCustomerTrip = ['servico_iniciado', 'em_andamento'].includes(state);
       // Sem state é o mapa de prévia da cotação: mantém a rota verde.
@@ -868,8 +891,9 @@ export function mapView(cfg) {
       else clearDriverRoute();
 
       if (showCustomerRoute && pk && ds) {
-        const points = [[Number(pk.lat), Number(pk.lng)], [Number(ds.lat), Number(ds.lng)]];
-        const key = points.map((p) => p.map((v) => v.toFixed(5)).join(',')).join('|');
+        const routeWaypoints = [pk, ...via, ds];
+        const points = routeWaypoints.map((point) => [Number(point.lat), Number(point.lng)]);
+        const key = points.map((point) => point.map((value) => value.toFixed(5)).join(',')).join('|');
         if (key !== lastRouteKey) {
           lastRouteKey = key;
           routeRequestId += 1;
@@ -885,7 +909,7 @@ export function mapView(cfg) {
           note.classList.remove('map-note-error');
           fitBoundsIfFollowing(L.latLngBounds(points).pad(0.2), { maxZoom: 17, animate: true });
           routeTimer = setTimeout(() => {
-            loadRoadRoute(pk, ds, key, requestId, controller);
+            loadRoadRoute(routeWaypoints, key, requestId, controller);
           }, 450);
         }
       } else {
