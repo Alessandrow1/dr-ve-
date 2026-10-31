@@ -225,7 +225,18 @@ function paintActive(view, ride) {
         out.push(h('div', { class: 'error', role: 'alert' }, 'Seu GPS não está enviando atualizações. Confira a permissão de localização e mantenha o Dr!nk aberto durante o deslocamento.'));
       }
     }
-    out.push(h('button', { class: 'btn', onclick: async (e) => { busy(e.currentTarget, true); await act(`/api/driver/rides/${ride.id}/${action}`); } }, label));
+    if (action === 'finish' && (ride.completedStops || 0) < (ride.stops || []).length) {
+      const nextStopIndex = ride.completedStops || 0;
+      const nextStop = ride.stops[nextStopIndex];
+      out.push(h('div', { class: 'card stack' },
+        h('b', {}, `Parada ${nextStopIndex + 1} de ${ride.stops.length}`),
+        h('p', {}, nextStop.label),
+        h('p', { class: 'muted small' }, 'Aguarde o cliente concluir a parada (até 5 min previstos) e confirme para seguir ao próximo ponto.'),
+        h('button', { class: 'btn ghost', onclick: async (event) => { busy(event.currentTarget, true); await act(`/api/driver/rides/${ride.id}/stop`); } }, 'Concluir parada e continuar')));
+      out.push(h('button', { class: 'btn', disabled: true }, 'Finalize após concluir as paradas'));
+    } else {
+      out.push(h('button', { class: 'btn', onclick: async (e) => { busy(e.currentTarget, true); await act(`/api/driver/rides/${ride.id}/${action}`); } }, label));
+    }
     if (['motorista_encontrado', 'motorista_a_caminho'].includes(ride.state)) out.push(h('button', { class: 'btn warn', onclick: async () => { if (confirm('Liberar esta solicitação para outro motorista?')) await act(`/api/driver/rides/${ride.id}/release`); } }, 'Liberar solicitação'));
   }
   out.push(h('button', { class: 'btn ghost', onclick: () => incidentModal(ride) }, 'Registrar ocorrência ou emergência'));
